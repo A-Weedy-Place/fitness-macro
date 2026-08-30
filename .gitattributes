@@ -1,0 +1,5 @@
+* text=auto
+
+# Keep cross-platform scripts runnable when the repository is checked out on Windows.
+*.sh text eol=lf
+*.py text eol=lf

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reply", "requiresConfirmation", "actions", "notes"],
+  "properties": {
+    "reply": { "type": "string" },
+    "requiresConfirmation": { "type": "boolean" },
+    "actions": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "summary", "confidence", "targetId", "date", "time", "name", "value", "quantity", "servings", "durationMinutes", "calories", "protein", "carbs", "fat", "displayName", "targetWeightKg", "activityFactor", "goalMode", "goalIntensity", "targetDate", "destination", "ingredients"],
+        "properties": {
+          "type": { "type": "string", "enum": ["log_foods", "save_food", "create_recipe", "create_recipe_and_log", "log_weight", "log_activity", "change_entry_time", "delete_entry", "delete_weight", "delete_activity", "set_goal", "update_profile", "create_plan_from_day", "apply_plan", "delete_plan", "navigate"] },
+          "summary": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "targetId": { "type": ["string", "null"] },
+          "date": { "type": ["string", "null"] },
+          "time": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "value": { "type": ["number", "null"] },
+          "quantity": { "type": ["number", "null"] },
+          "servings": { "type": ["number", "null"] },
+          "durationMinutes": { "type": ["number", "null"] },
+          "calories": { "type": ["number", "null"] },
+          "protein": { "type": ["number", "null"] },
+          "carbs": { "type": ["number", "null"] },
+          "fat": { "type": ["number", "null"] },
+          "displayName": { "type": ["string", "null"] },
+          "targetWeightKg": { "type": ["number", "null"] },
+          "activityFactor": { "type": ["number", "null"] },
+          "goalMode": { "enum": ["lose", "maintain", "gain", "recompose", null] },
+          "goalIntensity": { "enum": ["gentle", "moderate", "aggressive", null] },
+          "targetDate": { "type": ["string", "null"] },
+          "destination": { "enum": ["today", "plans", "trends", "assistant", "library", "profile", null] },
+          "ingredients": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "brand", "quantity", "unit", "gramsPerUnit", "caloriesPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "confidence"],
+              "properties": {
+                "name": { "type": "string" },
+                "brand": { "type": ["string", "null"] },
+                "quantity": { "type": "number", "exclusiveMinimum": 0 },
+                "unit": { "type": "string" },
+                "gramsPerUnit": { "type": "number", "exclusiveMinimum": 0 },
+                "caloriesPer100g": { "type": "number", "minimum": 0 },
+                "proteinPer100g": { "type": "number", "minimum": 0 },
+                "carbsPer100g": { "type": "number", "minimum": 0 },
+                "fatPer100g": { "type": "number", "minimum": 0 },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "notes": { "type": "array", "maxItems": 8, "items": { "type": "string" } }
+  }
+}

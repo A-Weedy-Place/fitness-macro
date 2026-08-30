@@ -1,0 +1,50 @@
+export default {
+  expo: {
+    name: 'FitnessMacro',
+    slug: 'fitness-macro',
+    version: '0.3.0',
+    orientation: 'portrait',
+    jsEngine: 'hermes',
+    updates: {
+      enabled: true,
+      checkAutomatically: 'ON_LOAD'
+    },
+    runtimeVersion: {
+      policy: 'sdkVersion'
+    },
+    plugins: [
+      'react-native-health-connect',
+      [
+        'expo-build-properties',
+        {
+          android: {
+            compileSdkVersion: 36,
+            targetSdkVersion: 36,
+            minSdkVersion: 26
+          }
+        }
+      ],
+      [
+        'expo-audio',
+        {
+          microphonePermission: 'Allow FitnessMacro to record food descriptions for local transcription.'
+        }
+      ],
+      [
+        'expo-camera',
+        {
+          cameraPermission: 'Allow FitnessMacro to scan food barcodes.',
+          recordAudioAndroid: false,
+          barcodeScannerEnabled: true
+        }
+      ]
+    ],
+    ios: {
+      supportsTablet: true
+    },
+    android: {
+      package: 'com.ashar.fitnessmacro',
+      permissions: []
+    }
+  }
+};

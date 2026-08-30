@@ -1,0 +1,28 @@
+{
+  "name": "fitness-macro-agent",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:full": "bash scripts/dev-full.sh",
+    "voice:setup": "bash scripts/setup-voice.sh",
+    "voice:start": "bash scripts/run-voice.sh",
+    "food:setup": "bash scripts/setup-food-data.sh",
+    "start": "node --loader ts-node/esm src/index.ts",
+    "build": "tsc",
+    "test": "node --import tsx tests/core.test.ts",
+    "lint": "echo \"lint not configured\""
+  },
+  "dependencies": {
+    "express": "^4.20.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.5.4"
+  }
+}
