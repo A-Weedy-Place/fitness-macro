@@ -219,7 +219,7 @@ function FitnessApp() {
   }
 
   async function resolveFoods(phrase: string, defaultTime = currentTime()): Promise<AgentResolution> {
-    const response = await resolveTranscript(phrase, date, defaultTime);
+    const response = await resolveTranscript(phrase, date, defaultTime, assistantContext());
     setState((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
     return {
       foods: response.candidates,
@@ -272,7 +272,7 @@ function FitnessApp() {
 
   async function transcribeFood(uri: string) {
     const result = await transcribeRecording(uri);
-    setStatus(`Audio transcribed locally by ${result.engine}; raw audio was not retained.`);
+    setStatus(`Audio transcribed by ${result.engine}; raw audio was not retained.`);
     return result.text;
   }
 
@@ -295,7 +295,7 @@ function FitnessApp() {
       activities: state.activities.slice(-120),
       recipes: state.recipes.map((recipe) => ({ id: recipe.id, foodId: recipe.foodId, name: recipe.name, servings: recipe.servings, ingredients: recipe.ingredients.map((item) => ({ ...item, foodName: names.get(item.foodId) })) })),
       plans: state.plans.map((plan) => ({ id: plan.id, name: plan.name, description: plan.description, itemCount: plan.items.length })),
-      userFoods: state.foods.filter((food) => food.source.source === 'manual' || food.tags?.includes('recipe')).slice(-150).map((food) => ({ id: food.id, name: food.name, brand: food.brand, serving: food.serving, nutrition: food.nutrition })),
+      userFoods: [...new Map([...state.foods.filter((food) => food.source.source === 'manual' || food.tags?.includes('recipe')), ...state.foods.slice(-500)].map((food) => [food.id, food])).values()].map((food) => ({ id: food.id, name: food.name, brand: food.brand, serving: food.serving, nutrition: food.nutrition, tags: food.tags, source: food.source, createdAt: food.createdAt, updatedAt: food.updatedAt })),
       capabilities: ['read app data', 'log/save food', 'create/log dishes', 'log weight', 'log activity', 'change diary time/date', 'delete records', 'set goals', 'update profile', 'create/apply/delete plans', 'navigate']
     };
   }
@@ -516,7 +516,7 @@ function FitnessApp() {
       const [stravaResult, audioResult, agentResult] = await Promise.all([getStravaStatus(), audioStatus(), agentStatus()]);
       setStrava(stravaResult);
       setAudioConfigured(audioResult.configured);
-      setCodexResolverEnabled(agentResult.codexFoodResolver.enabled);
+      setCodexResolverEnabled(agentResult.appAgent.enabled);
     } catch {
       setStrava(null);
       setAudioConfigured(null);

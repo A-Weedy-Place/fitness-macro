@@ -7,6 +7,10 @@ import { CustomFoodSchema, MealPlanSchema } from '../src/contracts.js';
 import { estimateTdee, mifflinStJeor, recommendDailyGoal } from '../src/logic/tdee.js';
 import { estimateStravaCalories } from '../src/integrations/strava.js';
 import { codexResolverStatus } from '../src/providers/codexFoodResolver.js';
+import { mapFoodAgentResult } from '../src/providers/codexFoodResolver.js';
+import { compactAppContext } from '../src/providers/appContext.js';
+import { groqStatus } from '../src/providers/groqJson.js';
+import { enforceAppPlan } from '../src/providers/groqAppAgent.js';
 
 test('agent validates custom foods and reusable plans', () => {
   const food = CustomFoodSchema.parse({ clientId: 'food_1', name: 'Roti', serving: { unit: 'piece', amount: 1, gramsPerUnit: 45 }, nutrition: { calories: 260, protein: 8, carbs: 50, fat: 3 } });
@@ -53,4 +57,54 @@ test('Codex resolver is opt-in and reports its execution boundary', () => {
   assert.equal(codexResolverStatus().busy, false);
   if (previous === undefined) delete process.env.CODEX_FOOD_RESOLVER_ENABLED;
   else process.env.CODEX_FOOD_RESOLVER_ENABLED = previous;
+});
+
+test('assistant context keeps relevant foods without sending full history', () => {
+  const entries = Array.from({ length: 500 }, (_, index) => ({ id: `entry_${index}`, date: index > 475 ? '2026-08-30' : '2026-08-01', foodName: `Food ${index}` }));
+  const userFoods = Array.from({ length: 150 }, (_, index) => ({ id: `food_${index}`, name: index === 93 ? 'Plain paratha' : `Unrelated food ${index}` }));
+  const recipes = Array.from({ length: 80 }, (_, index) => ({ id: `recipe_${index}`, name: index === 31 ? 'Aloo keema' : `Recipe ${index}` }));
+  const compact = compactAppContext('I ate one paratha and a plate of aloo keema', { currentDate: '2026-08-30', entries, userFoods, recipes });
+  const compactFoods = compact.userFoods as Array<{ name: string }>;
+  const compactRecipes = compact.recipes as Array<{ name: string }>;
+  assert.equal(compactFoods.some((food) => food.name === 'Plain paratha'), true);
+  assert.equal(compactRecipes.some((recipe) => recipe.name === 'Aloo keema'), true);
+  assert.ok((compact.entries as unknown[]).length <= 32);
+  assert.ok(JSON.stringify(compact).length <= 10_000);
+});
+
+test('Groq integration is explicitly free-tier-only and has no paid tools', () => {
+  const status = groqStatus();
+  assert.equal(status.freeTierOnly, true);
+  assert.equal(status.paidToolsEnabled, false);
+});
+
+test('food-agent plans reuse a saved cookbook food ID instead of duplicating it', () => {
+  const saved = {
+    id: 'recipe_food_aloo_keema', name: 'Aloo keema', serving: { unit: 'plate', amount: 1, gramsPerUnit: 350 },
+    nutrition: { calories: 155, protein: 9, carbs: 12, fat: 8 }, tags: ['recipe'],
+    createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z', source: { source: 'manual', confidence: 1 }
+  };
+  const result = mapFoodAgentResult('one plate aloo keema', '2026-08-30', '12:00', {
+    intent: 'log_foods', title: 'Log aloo keema', summary: 'One saved plate', dishName: null,
+    dishServings: 1, logServings: 1, logDate: null, eatenAt: null, clarification: null, notes: [],
+    foods: [{ existingFoodId: saved.id, name: saved.name, brand: null, quantity: 1, unit: 'plate', gramsPerUnit: 350, caloriesPer100g: 155, proteinPer100g: 9, carbsPer100g: 12, fatPer100g: 8, confidence: 1, sourceUrl: null }]
+  }, 'groq-resolved', { userFoods: [saved] });
+  assert.equal(result.candidates[0].id, saved.id);
+  assert.equal(result.plan?.items[0].foodId, saved.id);
+});
+
+test('Groq app plans require confirmation and preserve saved nutrition', () => {
+  const plan = enforceAppPlan({
+    reply: 'Logged your breakfast.', requiresConfirmation: false, notes: [],
+    actions: [{
+      type: 'log_foods', summary: 'Log breakfast', confidence: 1, targetId: null, date: '2026-08-30', time: '08:30', name: null,
+      value: null, quantity: null, servings: null, durationMinutes: null, calories: null, protein: null, carbs: null, fat: null,
+      displayName: null, targetWeightKg: null, activityFactor: null, goalMode: null, goalIntensity: null, targetDate: null, destination: null,
+      ingredients: [{ name: 'Plain paratha', brand: null, quantity: 1, unit: 'piece', gramsPerUnit: 95, caloriesPer100g: 999, proteinPer100g: 0, carbsPer100g: 0, fatPer100g: 0, confidence: 0.5 }]
+    }]
+  }, { userFoods: [{ name: 'Plain paratha', serving: { unit: 'piece', gramsPerUnit: 90 }, nutrition: { calories: 326, protein: 7.2, carbs: 45, fat: 13 }, source: { confidence: 0.9 } }] });
+  assert.equal(plan.requiresConfirmation, true);
+  assert.match(plan.reply, /Confirm to save/);
+  assert.equal(plan.actions[0].ingredients[0].caloriesPer100g, 326);
+  assert.equal(plan.actions[0].ingredients[0].gramsPerUnit, 90);
 });

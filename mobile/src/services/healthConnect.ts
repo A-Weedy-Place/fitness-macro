@@ -24,7 +24,7 @@ export async function syncStravaCaloriesFromHealthConnect(requestAccess = false,
     const health = await import('react-native-health-connect');
     const initialized = await health.initialize();
     if (!initialized) return { status: { available: false, permissionGranted: false, developmentBuildRequired: false, message: 'Health Connect is not available or needs an update.' }, activities: [] };
-    let granted = await health.getGrantedPermissions();
+    let granted: Array<{ accessType: 'read' | 'write'; recordType: string }> = await health.getGrantedPermissions();
     let permissionGranted = permissions.some((required) => granted.some((item) => item.accessType === required.accessType && item.recordType === required.recordType));
     if (!permissionGranted && requestAccess) {
       granted = await health.requestPermission(permissions);

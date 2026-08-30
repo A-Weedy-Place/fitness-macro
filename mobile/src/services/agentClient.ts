@@ -83,10 +83,10 @@ export async function createCustomFood(payload: CustomFoodInput) {
   return request<{ item: FoodItem }>('/v1/foods/custom', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function resolveTranscript(transcript: string, defaultDate: string, defaultTime?: string) {
+export async function resolveTranscript(transcript: string, defaultDate: string, defaultTime?: string, context?: unknown) {
   return request<ResolveFoodResponse>('/v1/agent/command', {
     method: 'POST',
-    body: JSON.stringify({ transcript, defaultDate, defaultTime })
+    body: JSON.stringify({ transcript, defaultDate, defaultTime, context })
   });
 }
 
@@ -112,11 +112,16 @@ export async function transcribeRecording(uri: string): Promise<{ text: string; 
   return await response.json() as { text: string; engine: string; retained: boolean };
 }
 
-export async function audioStatus(): Promise<{ configured: boolean; retention: string }> {
+export async function audioStatus(): Promise<{ configured: boolean; retention: string; provider?: string; mode?: string; model?: string }> {
   return request('/v1/audio/status');
 }
 
-export async function agentStatus(): Promise<{ codexAppAgent: { enabled: boolean; busy: boolean; timeoutSeconds: number }; codexFoodResolver: { enabled: boolean; liveSearch: boolean; busy: boolean; timeoutSeconds: number } }> {
+export async function agentStatus(): Promise<{
+  appAgent: { enabled: boolean; provider: string; busy: boolean; timeoutSeconds: number };
+  foodAgent: { enabled: boolean; provider: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
+  codexAppAgent: { enabled: boolean; provider?: string; busy: boolean; timeoutSeconds: number };
+  codexFoodResolver: { enabled: boolean; provider?: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
+}> {
   return request('/v1/agent/status');
 }
 

@@ -1,8 +1,18 @@
 ---
 tags: [fitness-app, macronutrients, local-first, roadmap]
 project: fitness-macro
-updated: 2026-08-07
+updated: 2026-08-30
 ---
+
+## Free Groq and efficient-agent checkpoint - 2026-08-30
+
+- New development constraint: speech and reasoning must require no additional subscription or API payment.
+- Groq Free is the preferred hosted development provider for Whisper transcription and GPT-OSS food planning; Codex CLI stays available only as an optional fallback.
+- The agent now compacts the mobile snapshot to relevant local foods, recipes, and diary records before inference instead of transmitting the full history.
+- Token controls include a context ceiling, low reasoning effort, output cap, stable cacheable prompts, and logged usage.
+- Paid hosted web-search tools are disabled. Broader recipe search, if needed, should use optional self-hosted SearXNG.
+- Exact Windows setup is in `docs/free-groq-agent-setup.md`.
+- Live Windows validation passed for Groq Whisper and GPT-OSS. Saved food nutrition now overrides model arithmetic, all mutations force confirmation, and the aloo-keema plus extra-oil scenario remained two separate log components.
 
 
 ## Current decisions

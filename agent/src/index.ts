@@ -30,11 +30,11 @@ import { fetchOpenFoodFactsByBarcode, fetchOpenFoodFactsByQuery } from './provid
 import { fetchUsdaByQuery } from './providers/usda.js';
 import { localUsdaIndexStatus, searchLocalUsdaFoods } from './providers/localUsdaIndex.js';
 import { estimateTdee, mifflinStJeor, recommendDailyGoal } from './logic/tdee.js';
-import { transcribeAudio, transcriberConfigured } from './providers/localTranscriber.js';
+import { transcribeAudio, transcriberStatus } from './providers/localTranscriber.js';
 import { completeStravaAuthorization, createStravaAuthorizationUrl, fetchStravaActivities, stravaStatus } from './integrations/strava.js';
-import { codexResolverStatus, resolveFoodWithCodex } from './providers/codexFoodResolver.js';
 import { codexGoalAdvisorStatus, reviewGoalWithCodex } from './providers/codexGoalAdvisor.js';
-import { codexAppAgentStatus, planAppCommand } from './providers/codexAppAgent.js';
+import { appAgentStatus, planAppCommand } from './providers/appAgent.js';
+import { foodAgentStatus, resolveFoodWithAgent } from './providers/foodAgent.js';
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -111,11 +111,13 @@ app.get('/v1/version', (_req, res) => {
 });
 
 app.get('/v1/audio/status', (_req, res) => {
-  res.json({ configured: transcriberConfigured(), retention: 'memory_only' });
+  res.json({ ...transcriberStatus(), retention: 'memory_only' });
 });
 
 app.get('/v1/agent/status', (_req, res) => {
-  res.json({ codexAppAgent: codexAppAgentStatus(), codexFoodResolver: codexResolverStatus(), codexGoalAdvisor: codexGoalAdvisorStatus(), localIngredientIndex: localUsdaIndexStatus() });
+  const appAgent = appAgentStatus();
+  const foodAgent = foodAgentStatus();
+  res.json({ appAgent, foodAgent, codexAppAgent: appAgent, codexFoodResolver: foodAgent, codexGoalAdvisor: codexGoalAdvisorStatus(), localIngredientIndex: localUsdaIndexStatus() });
 });
 
 app.post('/v1/assistant/plan', async (req, res) => {
@@ -206,13 +208,13 @@ async function handleAgentCommand(req: express.Request, res: express.Response) {
   const parsed = ResolveSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid_payload', issues: parsed.error.issues });
   try {
-    const codexResult = await resolveFoodWithCodex(parsed.data.transcript, parsed.data.defaultDate, parsed.data.defaultTime);
-    if (codexResult?.candidates.length) {
-      await saveFoodItems(codexResult.candidates);
-      return res.json({ ...codexResult, notes: ['Resolved by the specialized Codex food agent.', ...codexResult.notes] });
+    const agentResult = await resolveFoodWithAgent(parsed.data.transcript, parsed.data.defaultDate, parsed.data.defaultTime, parsed.data.context);
+    if (agentResult) {
+      await saveFoodItems(agentResult.candidates);
+      return res.json({ ...agentResult, notes: [`Resolved by the ${foodAgentStatus().provider} food agent.`, ...agentResult.notes] });
     }
   } catch (error) {
-    console.warn(`[agent] Codex food resolver fallback: ${error instanceof Error ? error.message : 'unknown error'}`);
+    console.warn(`[agent] AI food resolver fallback: ${error instanceof Error ? error.message : 'unknown error'}`);
   }
   const segments = transcriptSegments(parsed.data.transcript).slice(0, 5);
   const matches = await Promise.all(segments.map((segment) => findRemoteFoods(segment, 1)));

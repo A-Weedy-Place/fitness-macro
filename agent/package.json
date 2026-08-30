@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:env": "node --env-file=.env --import tsx src/index.ts",
     "dev:full": "bash scripts/dev-full.sh",
     "voice:setup": "bash scripts/setup-voice.sh",
     "voice:start": "bash scripts/run-voice.sh",

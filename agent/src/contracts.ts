@@ -200,7 +200,8 @@ const clientIdSchema = z.string().min(1).max(120).optional();
 export const ResolveSchema = z.object({
   transcript: z.string().min(1).max(4000),
   defaultDate: dateSchema,
-  defaultTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional()
+  defaultTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  context: z.unknown().optional()
 });
 
 export const AppCommandSchema = z.object({

@@ -1,5 +1,19 @@
 # context.md
 
+## Free Groq provider and token-budget checkpoint - 2026-08-30
+
+- Zero required spend is a hard product constraint. The recommended development path keeps the Groq account on its Free plan without a payment method.
+- Added provider-agnostic app and food-agent routing: Groq is preferred when `GROQ_API_KEY` exists, Codex CLI remains an optional fallback, and deterministic food resolution remains the final fallback.
+- Groq Whisper Large V3 Turbo can use the same private server-side key as the GPT-OSS reasoning model. The key must never enter an `EXPO_PUBLIC_*` variable.
+- Added compact local retrieval before inference: current-day entries plus a few relevant historical entries, top matching recipes/foods, a hard context-character budget, low reasoning effort, capped output, and terminal token-usage reporting.
+- Paid Groq Compound/web/browser-search tools are deliberately excluded. Existing local foods, USDA index/API, and Open Food Facts remain the no-cost nutrition path.
+- A future broad web-recipe fallback should be optional self-hosted SearXNG. Until then, missing-recipe estimates remain conservative and confirmation-gated.
+- Vercel AI SDK, Mastra, and LangGraph.js were evaluated. A small auditable provider layer is sufficient now; Vercel AI SDK is the leading future option if the tool loop becomes materially more complex.
+- Windows setup and free-plan safeguards are documented in `docs/free-groq-agent-setup.md`.
+- Live validation on the Windows PC passed: Groq Whisper transcribed a temporary WAV exactly and reported `retained: false`; GPT-OSS produced confirmation-gated plans for paratha plus eggs and for an existing aloo-keema recipe plus three separate tablespoons of oil.
+- The live tests exposed and fixed two trust-boundary issues: mutation plans now force confirmation regardless of model output, and saved cookbook nutrition deterministically overrides model-recalculated values.
+- Representative reasoning calls used 1,211-1,293 input tokens and 535-717 output tokens, remaining comfortably within the current personal-use free limits.
+
 ## Current decisions
 - Stack selected: React Native (Expo) with local-first architecture + local PC agent service for enrichment.
 - Mobile runtime baseline: Expo SDK 57, React Native 0.86, and React 19.2.

@@ -63,6 +63,8 @@ The app now uses five dedicated tabs for daily logging, reusable food plans, det
 
 See `docs/testing-guide.md` before the first phone test.
 
+For the current no-subscription Groq transcription and food-agent setup on Windows, see `docs/free-groq-agent-setup.md`.
+
 ## Open questions for next pass
 - Obsidian vault sync path and cadence
 - CSV export format details
