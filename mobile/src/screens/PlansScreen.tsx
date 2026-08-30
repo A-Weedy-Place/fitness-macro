@@ -32,6 +32,7 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
   const expenditureSeries = buildDailySeries({ endDate: date, days: 28, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile: state.profile });
   const adaptive = estimateAdaptiveExpenditure(expenditureSeries, state.weights, baselineTdee || 1);
   const weekly = profile?.weeklyWeightChangeKg || 0;
+  const program = review?.review || state.nutritionProgram;
 
   function create() {
     if (!name.trim()) return Alert.alert('Name your template', 'Use a short name such as Training Day or Easy Cut Day.');
@@ -46,7 +47,7 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
       <Text style={styles.heroKicker}>{goalLabel(profile).toUpperCase()}</Text>
       <Text style={styles.heroTitle}>{profile?.bodyWeightKg.toFixed(1)} kg → {profile?.targetWeightKg?.toFixed(1) || profile?.bodyWeightKg.toFixed(1)} kg</Text>
       <Text style={styles.heroDetail}>{profile?.targetDate ? `Target date ${profile.targetDate}` : 'No deadline'} · {profile?.goalIntensity || 'moderate'} pace · {weekly > 0 ? '+' : ''}{weekly.toFixed(2)} kg/week</Text>
-      <View style={styles.heroActions}><Button label="Edit goal" compact tone="secondary" onPress={onEditProfile} /><Button label="Ask local AI to review" compact onPress={onReview} /></View>
+      <View style={styles.heroActions}><Button label="Edit goal" compact tone="secondary" onPress={onEditProfile} /><Button label="Refresh personalized plan" compact onPress={onReview} /></View>
     </Card>
 
     <View style={styles.metrics}>
@@ -59,10 +60,18 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
     <Card>
       <SectionTitle title="Plan reasoning" detail="calculated locally" />
       <View style={styles.formula}><Text style={styles.formulaValue}>{tdee}</Text><Text style={styles.formulaLabel}>maintenance</Text><Text style={styles.formulaOperator}>{(goal?.calories || tdee) < tdee ? '−' : '+'}</Text><Text style={styles.formulaValue}>{Math.abs((goal?.calories || tdee) - tdee)}</Text><Text style={styles.formulaLabel}>adjustment</Text><Text style={styles.formulaOperator}>=</Text><Text style={styles.formulaValue}>{goal?.calories || '—'}</Text><Text style={styles.formulaLabel}>daily target</Text></View>
-      <Text style={styles.reviewSummary}>{review?.review.summary || 'Your target uses Mifflin-St Jeor, your selected activity level, and a bounded weekly rate. Ask the local AI for a plain-language review and practical actions.'}</Text>
-      {review?.review.actions.map((action) => <Text key={action} style={styles.reviewItem}>• {action}</Text>)}
-      {review?.review.cautions.map((caution) => <Text key={caution} style={styles.caution}>Check: {caution}</Text>)}
+      <Text style={styles.reviewSummary}>{program?.summary || 'Your target uses Mifflin-St Jeor, your selected activity level, and a bounded weekly rate. Refresh the plan for a culturally relevant sample day.'}</Text>
+      {program?.actions.map((action) => <Text key={action} style={styles.reviewItem}>• {action}</Text>)}
+      {program?.cautions.map((caution) => <Text key={caution} style={styles.caution}>Check: {caution}</Text>)}
     </Card>
+
+    {program?.meals?.length ? <Card>
+      <SectionTitle title="Flexible example day" detail={program.aiGenerated ? 'Groq-personalized · targets locked locally' : 'local fallback'} />
+      <Text style={styles.reviewSummary}>These are suggestions, not mandatory foods. The meal targets add back to your daily calorie and protein goals.</Text>
+      {program.meals.map((meal) => <View key={`${meal.time}_${meal.label}`} style={styles.mealRow}><View style={styles.mealHeading}><Text style={styles.mealName}>{meal.time} · {meal.label}</Text><Text style={styles.mealTarget}>{meal.targetCalories} kcal · {meal.targetProtein}g protein</Text></View>{meal.foods.map((food) => <Text key={food} style={styles.item}>• {food}</Text>)}</View>)}
+      <Text style={styles.sourceHeading}>GUIDANCE SOURCES</Text>
+      {program.sources.map((source) => <Text key={source.url} style={styles.source}>• {source.title}</Text>)}
+    </Card> : null}
 
     <Card>
       <SectionTitle title="Trend-based expenditure" detail={adaptive.status === 'updating' ? `${(adaptive.confidence * 100).toFixed(0)}% confidence` : 'collecting data'} />
@@ -114,6 +123,12 @@ const styles = StyleSheet.create({
   metricLabel: { color: colors.muted, fontSize: 10 },
   items: { borderTopWidth: 1, borderColor: colors.line, marginTop: 13, paddingTop: 10, gap: 5 },
   item: { color: colors.muted, fontSize: 12 },
+  mealRow: { borderTopWidth: 1, borderColor: colors.line, paddingVertical: 11 },
+  mealHeading: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
+  mealName: { color: colors.ink, fontWeight: '900', flex: 1 },
+  mealTarget: { color: colors.pine, fontSize: 10, fontWeight: '800' },
+  sourceHeading: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginTop: 12 },
+  source: { color: colors.muted, fontSize: 10, lineHeight: 16, marginTop: 4 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14 },
   action: { flex: 1 }
 });

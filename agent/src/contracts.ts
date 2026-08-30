@@ -131,6 +131,10 @@ export interface UserProfile {
   preferredWeightUnit?: 'kg' | 'lb';
   adaptiveTdee?: number;
   adaptiveTdeeUpdatedAt?: string;
+  dietStyle?: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian';
+  preferredCuisine?: 'pakistani' | 'indian' | 'south_asian' | 'southeast_asian' | 'mixed';
+  excludedFoods?: string;
+  mealsPerDay?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -259,6 +263,10 @@ export const ProfileSchema = z.object({
   preferredWeightUnit: z.enum(['kg', 'lb']).optional()
   ,adaptiveTdee: z.number().min(800).max(10000).optional(),
   adaptiveTdeeUpdatedAt: z.string().datetime().optional()
+  ,dietStyle: z.enum(['omnivore', 'vegetarian', 'vegan', 'pescatarian']).optional(),
+  preferredCuisine: z.enum(['pakistani', 'indian', 'south_asian', 'southeast_asian', 'mixed']).optional(),
+  excludedFoods: z.string().max(500).optional(),
+  mealsPerDay: z.number().int().min(2).max(6).optional()
 });
 
 export const DailyGoalSchema = z.object({

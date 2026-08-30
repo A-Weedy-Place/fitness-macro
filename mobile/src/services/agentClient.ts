@@ -63,7 +63,14 @@ export interface GoalReviewResponse {
   goal: DailyGoal;
   bmr: number;
   tdee: number;
-  review: { summary: string; actions: string[]; cautions: string[]; aiGenerated: boolean };
+  review: {
+    summary: string;
+    actions: string[];
+    cautions: string[];
+    meals: Array<{ label: string; time: string; targetCalories: number; targetProtein: number; foods: string[] }>;
+    sources: Array<{ title: string; url: string }>;
+    aiGenerated: boolean;
+  };
 }
 
 export async function getGoalRecommendation(profile: UserProfile): Promise<GoalReviewResponse> {

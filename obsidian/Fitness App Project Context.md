@@ -4,6 +4,27 @@ project: fitness-macro
 updated: 2026-08-30
 ---
 
+## Phone-test product specification checkpoint - 2026-08-30
+
+- Keep this note and `context.md` synchronized after material product decisions and completed work.
+- Profile/onboarding data must drive a personalized nutrition program. Health Connect is a free Android data bridge for weight/activity records, while deterministic bounded calculations own target numbers and Groq personalizes/explains meals and operates typed actions.
+- The assistant must control food logging at explicit times, time corrections, deletion, recipe creation/editing/reuse, separate one-off modifiers such as extra oil, daily weight, and later exercise/Strava.
+- Library UX must separate recently eaten foods, the user's personal cookbook, and a broader reference catalog, with strong Pakistani, Indian, South Asian, and Southeast Asian coverage.
+- Resolution order is reviewed saved recipe, trustworthy reference evidence, then conservative confirmation-gated Groq ingredient decomposition. Reviewed recipes are reused without repeated research; model estimates never silently overwrite cookbook nutrition.
+- Store at most one canonical weight record per local calendar day; a second value updates that day.
+- Prefer installable APK builds for realistic performance and native Health Connect tests; retain Expo Go for quick iteration.
+
+### Implemented from this checkpoint
+
+- Mobile state is now schema **6** (migration from 5). It saves the personalized nutrition program and keeps only the latest weight record for every calendar day. The PC agent remains schema 5 but applies the same daily-weight rule.
+- Onboarding captures eating style, preferred food familiarity (Pakistani/Indian/South Asian/Southeast Asian), meals per day, and optional foods to avoid. Groq returns a flexible meal structure, while local Mifflin-St Jeor/TDEE calculations remain the locked source of calorie and macro targets.
+- Goals persist the sample day, per-meal target allocations, actions/cautions, and WHO, ICMR-NIN 2024, and Dietary Guidelines source links. The local plan remains available if Groq is unavailable.
+- Health Connect is free, permission-scoped Android import for daily weight and Strava calories. A manual in-app check-in wins for the same day. Native Health Connect requires the custom APK/development build, not Expo Go.
+- The Food tab now shows true Recent foods, My cookbook, and Reference catalog separately; recipes show Personal recipe vs AI estimate provenance. An AI estimate never overwrites saved cookbook nutrition.
+- `docs/food-data-strategy.md` documents free/attributed sources: local/USDA first, IFCT 2017 planned for South Asian ingredients, and RecipeDB excluded for its non-commercial licence.
+- `mobile/eas.json` defines EAS development and installable preview APK profiles. Android LAN HTTP is enabled intentionally for the paired PC agent.
+- Live agent test produced a Pakistani three-meal structure while holding the local target at 2,147 kcal / 148 g protein. Mobile type-check + 12 tests and agent build + 8 tests pass.
+
 ## Free Groq and efficient-agent checkpoint - 2026-08-30
 
 - New development constraint: speech and reasoning must require no additional subscription or API payment.
@@ -48,7 +69,7 @@ updated: 2026-08-30
 - Agent runs on local PC. Pairing token is mandatory for API access.
 
 ## Schema changes
-- Current schema version: `4`.
+- Mobile app state: schema `6`; PC agent JSON store: schema `5`.
 - Migration tracked in `agent/src/storage/db.ts` and applied on startup.
 - Core entities:
   - `UserProfile`

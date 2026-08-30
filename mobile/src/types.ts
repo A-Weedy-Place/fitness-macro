@@ -112,6 +112,11 @@ export interface Recipe {
   ingredients: RecipeIngredient[];
   foodId: string;
   sourceDescription?: string;
+  reviewStatus?: 'manual' | 'ai_estimated' | 'reference_reviewed';
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceLicense?: string;
+  reviewedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -181,8 +186,31 @@ export interface UserProfile {
   preferredWeightUnit?: 'kg' | 'lb';
   adaptiveTdee?: number;
   adaptiveTdeeUpdatedAt?: string;
+  dietStyle?: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian';
+  preferredCuisine?: 'pakistani' | 'indian' | 'south_asian' | 'southeast_asian' | 'mixed';
+  excludedFoods?: string;
+  mealsPerDay?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NutritionProgramMeal {
+  label: string;
+  time: string;
+  targetCalories: number;
+  targetProtein: number;
+  foods: string[];
+}
+
+export interface NutritionProgram {
+  createdAt: string;
+  profileUpdatedAt: string;
+  summary: string;
+  actions: string[];
+  cautions: string[];
+  meals: NutritionProgramMeal[];
+  sources: Array<{ title: string; url: string }>;
+  aiGenerated: boolean;
 }
 
 export type ProfileInput = Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'>;
@@ -209,7 +237,7 @@ export type PendingOperation =
   | { id: string; kind: 'deletePlan'; payload: { id: string }; createdAt: string };
 
 export interface AppState {
-  version: 5;
+  version: 6;
   profile?: UserProfile;
   foods: FoodItem[];
   entries: FoodEntry[];
@@ -218,6 +246,7 @@ export interface AppState {
   goals: DailyGoal[];
   plans: MealPlan[];
   recipes: Recipe[];
+  nutritionProgram?: NutritionProgram;
   pendingOperations: PendingOperation[];
   lastSyncedAt?: string;
 }

@@ -12,6 +12,11 @@ export default {
     runtimeVersion: {
       policy: 'sdkVersion'
     },
+    extra: {
+      eas: {
+        projectId: '714cf37d-459a-4408-b025-1334f0bfc779'
+      }
+    },
     plugins: [
       'react-native-health-connect',
       [
@@ -20,7 +25,8 @@ export default {
           android: {
             compileSdkVersion: 36,
             targetSdkVersion: 36,
-            minSdkVersion: 26
+            minSdkVersion: 26,
+            usesCleartextTraffic: true
           }
         }
       ],

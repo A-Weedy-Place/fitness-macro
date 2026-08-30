@@ -1,33 +1,23 @@
-# Food, ingredient, and recipe data strategy
+# Food data and recipe provenance
 
-## Implemented source order
+FitnessMacro uses a layered, no-subscription food-data strategy.
 
-1. Local saved foods and recipes: instant, offline, and user-correctable.
-2. Bundled staples: common ingredients plus Pakistani/South Asian foods guarantee useful search results even when the PC is unavailable.
-3. Open Food Facts: global packaged products, barcodes, ingredients, and label nutrition without an API key.
-4. USDA FoodData Central: generic foods and ingredients. The agent uses the official `DEMO_KEY` for low-volume testing and a private `USDA_API_KEY` for routine use.
-5. Groq agent: contextual fallback for regional dishes and unusual packet descriptions, always requiring confirmation.
+1. **Personal cookbook first.** A saved food or recipe is reused with its own nutrition. An AI estimate never silently changes it.
+2. **Reference ingredients second.** The on-device starter catalog, the optional local USDA index, and USDA FoodData Central support ingredient-level lookups. The project is designed to add ingredient coverage from the free [Indian Food Composition Tables 2017](https://www.nin.res.in/ebooks/IFCT2017.pdf), which includes regional names and is a better fit for South Asian ingredients than a generic recipe API.
+3. **New dishes are transparent estimates.** If no saved dish is found, Groq can suggest a decomposed ingredient recipe. It is stored as `AI estimate`, not as verified or approved. The user confirms before it is saved or logged.
+4. **Attribution before web recipes.** The optional [Recipe Context Protocol](https://recipecontextprotocol.com/about) is a zero-key recipe reference with recipe-level licenses. Its Wikibooks recipes are CC BY-SA 4.0, so any integration must save and show the source URL, attribution, and license. It must not copy recipe text without meeting that licence. RecipeDB is deliberately not embedded because its CC BY-NC-SA licence would constrain a future commercial product.
 
-The local cache remains the product library. Online records are copied into local data only after they are selected, so frequently used foods remain available offline.
+The app therefore records recipe provenance as **Personal recipe**, **AI estimate**, or **Reviewed reference**. Only a specifically reviewed, attributed reference may receive the final label. This protects the diary from a model changing a known dish merely because a generic web result disagrees.
 
-## Research decisions
+The local cache remains the practical product library. Online records are copied into local data only after selection, so frequently used foods continue to work while the PC or internet is unavailable.
 
-- FoodData Central is public-domain/CC0 and exposes search/details APIs. Its demo key permits 30 requests per hour and 50 per day; a free private data.gov key permits the normal 1,000 requests per hour. It also publishes Foundation, SR Legacy, FNDDS, and branded datasets as JSON/CSV for a later bulk-index phase.
-- Open Food Facts is a free, open, worldwide packaged-food database containing millions of products. It is the first choice for barcodes and packet labels, not the canonical source for generic cooked ingredients.
-- RecipeDB reports 118,171 recipes and 23,548 ingredients with nutrition and regional metadata. It is valuable for research, but this project will not scrape or redistribute it until a stable API and the required reuse license are confirmed.
-- Recipe nutrition in this app is therefore calculated from selected ingredient records, quantities, servings, and optional cooked batch weight. This is more auditable than importing an unexplained recipe total.
+## Source notes and accuracy policy
 
-## Accuracy policy
+- [USDA FoodData Central](https://fdc.nal.usda.gov/api-guide/) is used for generic ingredients. Its `DEMO_KEY` is suitable only for low-volume development; a free private data.gov key provides the normal higher rate limit when needed.
+- [Open Food Facts](https://openfoodfacts.github.io/documentation/) is the no-key source for barcodes and exact packaged-food labels. A package label wins over a generic estimate for that specific product.
+- Food records keep their source and confidence. Bundled records are tagged as estimates; recipe nutrition is calculated from selected ingredients, quantity, servings, and optional cooked batch weight rather than an unexplained total.
+- All AI suggestions are confirmation-gated. Users can correct a food or recipe locally, and the saved correction is reused in preference to a new estimate.
 
-- Every record keeps its source and confidence.
-- Bundled records are clearly tagged as estimates and are intended as usable defaults, not laboratory truth.
-- Packaged-food labels win over generic database estimates for that exact package.
-- Users confirm AI suggestions and can save corrected foods locally.
-- Calories/macros are normalized per 100 g and converted through explicit serving weights.
+## South Asian expansion plan
 
-## Sources
-
-- https://fdc.nal.usda.gov/api-guide/
-- https://fdc.nal.usda.gov/download-datasets/
-- https://openfoodfacts.github.io/documentation/
-- https://pmc.ncbi.nlm.nih.gov/articles/PMC7687679/
+The next catalog import should be ingredient-first: IFCT/USDA-normalized rice, atta, lentils (including mash/urad), vegetables, oils, dairy, meats, and common packaged foods. Dishes such as aloo keema and mash ki dal should be saved as recipes built from those ingredients, because their oil, meat ratio, and portion size vary materially between households.

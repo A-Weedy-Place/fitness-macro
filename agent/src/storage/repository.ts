@@ -28,7 +28,8 @@ export async function createWeightLog(
   input: Omit<BodyMetricLog, 'id' | 'enteredAt'> & { clientId?: string }
 ): Promise<BodyMetricLog> {
   const { clientId, ...data } = input;
-  const log: BodyMetricLog = { ...data, id: clientId || makeId('weight'), enteredAt: new Date().toISOString() };
+  const existing = db.listWeights(data.date, data.date)[0];
+  const log: BodyMetricLog = { ...data, id: existing?.id || clientId || makeId('weight'), enteredAt: new Date().toISOString() };
   db.addWeight(log);
   await recordSync('weight', log.id);
   return log;
@@ -85,6 +86,7 @@ export async function saveProfile(input: Omit<UserProfile, 'id' | 'createdAt' | 
   const existing = db.getProfile();
   const now = new Date().toISOString();
   const profile: UserProfile = {
+    ...existing,
     ...input,
     id: existing?.id || makeId('profile'),
     createdAt: existing?.createdAt || now,

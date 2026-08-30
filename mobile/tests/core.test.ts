@@ -11,6 +11,7 @@ import { estimateActivityCalories } from '../src/logic/activityEnergy';
 import { mealForTime } from '../src/logic/time';
 import { calculateRecipe } from '../src/logic/recipes';
 import { estimateAdaptiveExpenditure } from '../src/logic/expenditure';
+import { EMPTY_STATE, upsertWeight } from '../src/storage/localDb';
 import { BodyMetricLog, FoodEntry, FoodItem, UserProfile } from '../src/types';
 
 const food: FoodItem = {
@@ -111,11 +112,18 @@ test('goal pace is derived from deadline and capped by body weight', () => {
   assert.equal(weekly, -0.75);
 });
 
-test('portable backup restores schema 5 without pending secrets or operations', () => {
-  const state = restorePortableBackup(createPortableBackup({ version: 5, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [], pendingOperations: [] }));
-  assert.equal(state.version, 5);
+test('portable backup migrates to schema 6 without pending secrets or operations', () => {
+  const state = restorePortableBackup(createPortableBackup({ version: 6, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [], pendingOperations: [] }));
+  assert.equal(state.version, 6);
   assert.equal(state.entries[0].eatenAt, '13:00');
   assert.equal(state.pendingOperations.length, 0);
+});
+
+test('one weigh-in is retained per calendar day, with the latest replacing the first', () => {
+  const first = { id: 'weight_1', date: '2026-08-30', weightKg: 82, enteredAt: '2026-08-30T07:00:00Z' };
+  const replacement = { id: 'weight_2', date: '2026-08-30', weightKg: 81.7, enteredAt: '2026-08-30T20:00:00Z' };
+  const state = upsertWeight(upsertWeight(EMPTY_STATE, first), replacement);
+  assert.deepEqual(state.weights, [replacement]);
 });
 
 test('display units round-trip to canonical metric storage', () => {

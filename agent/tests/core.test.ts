@@ -38,6 +38,9 @@ test('JSON store migrates to schema 5 and deletes idempotently', async () => {
     assert.equal(db.listEntries('2026-08-07').length, 1);
     assert.equal(db.deleteEntry(entry.id), true);
     assert.equal(db.deleteEntry(entry.id), false);
+    db.addWeight({ id: 'weight_morning', date: '2026-08-07', weightKg: 80, enteredAt: '2026-08-07T07:00:00Z' });
+    db.addWeight({ id: 'weight_evening', date: '2026-08-07', weightKg: 79.8, enteredAt: '2026-08-07T20:00:00Z' });
+    assert.deepEqual(db.listWeights('2026-08-07', '2026-08-07').map((weight) => weight.id), ['weight_evening']);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

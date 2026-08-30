@@ -34,6 +34,7 @@ import { transcribeAudio, transcriberStatus } from './providers/groqTranscriber.
 import { completeStravaAuthorization, createStravaAuthorizationUrl, fetchStravaActivities, stravaStatus } from './integrations/strava.js';
 import { appAgentStatus, planAppCommand } from './providers/appAgent.js';
 import { foodAgentStatus, resolveFoodWithAgent } from './providers/foodAgent.js';
+import { localGoalAdvice, personalizeGoal } from './providers/goalAdvisor.js';
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -340,12 +341,12 @@ app.post('/v1/goals/recommendation', async (req, res) => {
   const bmr = mifflinStJeor(profile);
   const tdee = profile.adaptiveTdee || estimateTdee(bmr, profile.activityFactor);
   const goal = recommendDailyGoal(profile, date);
-  const review = {
-    summary: `The ${goal.calories} kcal target starts from an estimated ${tdee} kcal maintenance level and a bounded ${profile.weeklyWeightChangeKg} kg weekly direction.`,
-    actions: ['Log food consistently before making adjustments.', 'Review the rolling weight trend after at least two weeks.', 'Keep activity calories visible rather than automatically eating them back.'],
-    cautions: ['Estimates are not medical advice; stop and seek qualified guidance if the plan causes concerning symptoms.'],
-    aiGenerated: false
-  };
+  let review = localGoalAdvice(goal, tdee, profile.weeklyWeightChangeKg);
+  try {
+    review = await personalizeGoal(profile, goal, tdee);
+  } catch (error) {
+    console.warn(`[agent] Goal personalization unavailable; using local plan: ${error instanceof Error ? error.message : String(error)}`);
+  }
   res.json({ goal, bmr, tdee, review });
 });
 

@@ -16,6 +16,7 @@ import {
   FoodItem,
   MealPlan,
   MealType,
+  NutritionProgram,
   PendingOperation,
   ProfileInput,
   Recipe,
@@ -61,7 +62,7 @@ import { QuickLogSheet, PlateItem } from './src/components/QuickLogSheet';
 import { calculateRecipe } from './src/logic/recipes';
 import { currentTime, mealForTime } from './src/logic/time';
 import { estimateActivityCalories } from './src/logic/activityEnergy';
-import { HealthConnectStatus, openHealthConnectSettings, syncStravaCaloriesFromHealthConnect } from './src/services/healthConnect';
+import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect } from './src/services/healthConnect';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -158,7 +159,7 @@ function FitnessApp() {
   }
 
   async function addWeight(weightKg: number) {
-    const id = makeId('weight');
+    const id = state.weights.find((item) => item.date === date)?.id || makeId('weight');
     const enteredAt = now();
     const payload: WeightInput = { clientId: id, date, weightKg };
     const item: BodyMetricLog = { id, date, weightKg, enteredAt };
@@ -250,7 +251,7 @@ function FitnessApp() {
     const servings = Math.max(plan.dish?.servings || 1, 1);
     const confidence = plan.items.reduce((sum, item) => sum + item.confidence, 0) / Math.max(plan.items.length, 1);
     const food: FoodItem = { id: foodId, name: plan.dish?.name || plan.title, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / servings }, nutrition: calculation.per100g, tags: ['recipe', 'custom-dish', 'ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence } };
-    const recipe: Recipe = { id: recipeId, name: food.name, servings, finalWeightGrams: calculation.finalGrams, ingredients, foodId, sourceDescription: resolution.transcript, createdAt: timestamp, updatedAt: timestamp };
+    const recipe: Recipe = { id: recipeId, name: food.name, servings, finalWeightGrams: calculation.finalGrams, ingredients, foodId, sourceDescription: resolution.transcript, reviewStatus: 'ai_estimated', sourceName: 'Groq ingredient estimate', createdAt: timestamp, updatedAt: timestamp };
     const entryId = makeId('entry');
     const eatenAt = plan.log.eatenAt || fallbackTime;
     const logDate = plan.log.date || date;
@@ -277,10 +278,17 @@ function FitnessApp() {
   }
 
   async function refreshHealthConnect(requestAccess: boolean) {
-    const result = await syncStravaCaloriesFromHealthConnect(requestAccess);
+    const result = await syncHealthConnect(requestAccess);
     setHealthConnect(result.status);
-    if (result.activities.length) setState((current) => result.activities.reduce((next, activity) => upsertActivity(next, activity), current));
-    if (requestAccess) setStatus(result.activities.length ? `${result.activities.length} Strava calorie record(s) imported from Health Connect.` : result.status.message);
+    if (result.activities.length || result.weights.length) setState((current) => {
+      const withActivities = result.activities.reduce((next, activity) => upsertActivity(next, activity), current);
+      return result.weights.reduce((next, weight) => {
+        const existing = next.weights.find((item) => item.date === weight.date);
+        // A deliberate in-app check-in wins over an imported source for that day.
+        return !existing || existing.notes === 'Imported from Health Connect' ? upsertWeight(next, weight) : next;
+      }, withActivities);
+    });
+    if (requestAccess) setStatus(result.status.message);
   }
 
   function assistantContext() {
@@ -293,7 +301,7 @@ function FitnessApp() {
       entries: state.entries.slice(-500).map((entry) => ({ id: entry.id, date: entry.date, time: entry.eatenAt, mealType: entry.mealType, foodId: entry.foodId, foodName: names.get(entry.foodId), quantity: entry.portion.quantity, unit: entry.portion.unit })),
       weights: state.weights.slice(-120),
       activities: state.activities.slice(-120),
-      recipes: state.recipes.map((recipe) => ({ id: recipe.id, foodId: recipe.foodId, name: recipe.name, servings: recipe.servings, ingredients: recipe.ingredients.map((item) => ({ ...item, foodName: names.get(item.foodId) })) })),
+      recipes: state.recipes.map((recipe) => ({ id: recipe.id, foodId: recipe.foodId, name: recipe.name, servings: recipe.servings, reviewStatus: recipe.reviewStatus || 'manual', sourceName: recipe.sourceName, sourceUrl: recipe.sourceUrl, ingredients: recipe.ingredients.map((item) => ({ ...item, foodName: names.get(item.foodId) })) })),
       plans: state.plans.map((plan) => ({ id: plan.id, name: plan.name, description: plan.description, itemCount: plan.items.length })),
       userFoods: [...new Map([...state.foods.filter((food) => food.source.source === 'manual' || food.tags?.includes('recipe')), ...state.foods.slice(-500)].map((food) => [food.id, food])).values()].map((food) => ({ id: food.id, name: food.name, brand: food.brand, serving: food.serving, nutrition: food.nutrition, tags: food.tags, source: food.source, createdAt: food.createdAt, updatedAt: food.updatedAt })),
       capabilities: ['read app data', 'log/save food', 'create/log dishes', 'log weight', 'log activity', 'change diary time/date', 'delete records', 'set goals', 'update profile', 'create/apply/delete plans', 'navigate']
@@ -348,12 +356,12 @@ function FitnessApp() {
           if (!calculation.finalGrams) continue;
           const foodId = makeId('recipe_food'); const recipeId = makeId('recipe'); const servings = Math.max(action.servings || 1, 1);
           const dish: FoodItem = { id: foodId, name: action.name || 'AI dish', serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / servings }, nutrition: calculation.per100g, tags: ['recipe', 'custom-dish', 'ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: action.confidence } };
-          const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, createdAt: timestamp, updatedAt: timestamp };
+          const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, reviewStatus: 'ai_estimated', sourceName: 'Groq ingredient estimate', createdAt: timestamp, updatedAt: timestamp };
           next = upsertRecipe(upsertFood(next, dish), recipe);
           operations.push(operation('food', { clientId: dish.id, name: dish.name, serving: dish.serving, nutrition: dish.nutrition }));
           if (action.type === 'create_recipe_and_log') addEntry(dish, action.quantity || 1, actionDate, actionTime, 'Created and logged by the AI assistant.');
         } else if (action.type === 'log_weight' && action.value) {
-          const id = makeId('weight'); const payload: WeightInput = { clientId: id, date: actionDate, weightKg: action.value };
+          const id = next.weights.find((item) => item.date === actionDate)?.id || makeId('weight'); const payload: WeightInput = { clientId: id, date: actionDate, weightKg: action.value };
           next = upsertWeight(next, { id, date: actionDate, weightKg: action.value, enteredAt: timestamp }); operations.push(operation('weight', payload));
         } else if (action.type === 'log_activity' && action.name && action.durationMinutes) {
           const id = makeId('activity'); const calories = action.calories ?? estimateActivityCalories(action.name, action.durationMinutes, next.profile?.bodyWeightKg || 75).calories;
@@ -369,7 +377,7 @@ function FitnessApp() {
         else if (action.type === 'set_goal' && action.calories != null && action.protein != null && action.carbs != null && action.fat != null) {
           const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); operations.push(operation('goal', goal));
         } else if (action.type === 'update_profile' && next.profile) {
-          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt };
+          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
           next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); operations.push(operation('profile', input));
         } else if (action.type === 'create_plan_from_day' && action.name) {
           const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); operations.push(operation('plan', built.payload));
@@ -391,9 +399,10 @@ function FitnessApp() {
 
   async function saveProfileInput(input: ProfileInput) {
     const timestamp = now();
-    const profile: UserProfile = { ...input, id: state.profile?.id || makeId('profile'), createdAt: state.profile?.createdAt || timestamp, updatedAt: timestamp };
+    const profile: UserProfile = { ...state.profile, ...input, id: state.profile?.id || makeId('profile'), createdAt: state.profile?.createdAt || timestamp, updatedAt: timestamp };
     const goal = recommendDailyGoal(profile, date);
     await commit(upsertGoal(setProfile(state, profile), goal), [operation('profile', input)], `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
+    await personalizeProgram(profile);
   }
 
   async function completeOnboarding(input: ProfileInput, includeDemo: boolean) {
@@ -402,6 +411,19 @@ function FitnessApp() {
     const base = includeDemo ? withDemoData(state, date, profile) : state;
     const goal = recommendDailyGoal(profile, date);
     await commit(upsertGoal(setProfile(base, profile), goal), [operation('profile', input)], includeDemo ? 'Profile ready with 60 days of demo history' : 'Profile and targets ready');
+    await personalizeProgram(profile);
+  }
+
+  async function personalizeProgram(profile: UserProfile) {
+    try {
+      const response = await getGoalRecommendation(profile);
+      const program: NutritionProgram = { createdAt: now(), profileUpdatedAt: profile.updatedAt, ...response.review };
+      setGoalReview(response);
+      setState((current) => ({ ...current, nutritionProgram: program }));
+      setStatus(response.review.aiGenerated ? 'Personalized food structure created with locked local targets.' : 'Safe local food structure created; AI personalization was unavailable.');
+    } catch {
+      setStatus('Profile saved. The PC agent was unavailable, so the existing local targets remain active.');
+    }
   }
 
   function loadDemo() {
@@ -423,7 +445,8 @@ function FitnessApp() {
     try {
       const review = await getGoalRecommendation(state.profile);
       setGoalReview(review);
-      setStatus('Goal reviewed with the local safety calculation.');
+      setState((current) => ({ ...current, nutritionProgram: { createdAt: now(), profileUpdatedAt: state.profile!.updatedAt, ...review.review } }));
+      setStatus(review.review.aiGenerated ? 'Food structure refreshed by Groq without changing the safe targets.' : 'Local food structure refreshed; Groq was unavailable.');
     } catch {
       setStatus('PC advisor unavailable. Your deterministic calorie target remains active.');
     }
@@ -452,7 +475,7 @@ function FitnessApp() {
       id: foodId, name: input.name, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g,
       tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
     };
-    const recipe: Recipe = { id: recipeId, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, foodId, sourceDescription: input.sourceDescription, createdAt: timestamp, updatedAt: timestamp };
+    const recipe: Recipe = { id: recipeId, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, foodId, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, createdAt: timestamp, updatedAt: timestamp };
     const payload: CustomFoodInput = { clientId: foodId, name: food.name, serving: food.serving, nutrition: food.nutrition };
     await commit(upsertRecipe(upsertFood(state, food), recipe), [operation('food', payload)], `${food.name} saved as a reusable dish`);
     return food;

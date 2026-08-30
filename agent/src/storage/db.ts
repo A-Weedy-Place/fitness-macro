@@ -22,12 +22,19 @@ function ensureDirectory() {
 }
 
 function migrate(db: Partial<DbSchema> & { version?: number }): DbSchema {
+  const weightsByDate = new Map<string, BodyMetricLog>();
+  if (Array.isArray(db.weights)) {
+    for (const weight of db.weights) {
+      const current = weightsByDate.get(weight.date);
+      if (!current || weight.enteredAt >= current.enteredAt) weightsByDate.set(weight.date, weight);
+    }
+  }
   return {
     version: 5,
     userProfile: db.userProfile,
     foodItems: Array.isArray(db.foodItems) ? db.foodItems : [],
     entries: Array.isArray(db.entries) ? db.entries : [],
-    weights: Array.isArray(db.weights) ? db.weights : [],
+    weights: [...weightsByDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     activities: Array.isArray(db.activities) ? db.activities : [],
     goals: Array.isArray(db.goals) ? db.goals : [],
     plans: Array.isArray(db.plans) ? db.plans : [],
@@ -127,6 +134,7 @@ export function createDbAccessor() {
 
     addWeight(log: BodyMetricLog): void {
       const db = readDb();
+      db.weights = db.weights.filter((weight) => weight.date !== log.date || weight.id === log.id);
       upsertById(db.weights, log);
       db.weights.sort((a, b) => a.date.localeCompare(b.date));
       writeDb(db);

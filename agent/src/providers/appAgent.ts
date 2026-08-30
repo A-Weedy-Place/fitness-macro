@@ -60,9 +60,10 @@ const SYSTEM_PROMPT = [
   'Return the smallest exact set of actions matching the JSON schema. Never claim an action already happened.',
   'Every mutation requires confirmation. Read-only answers have no actions and do not require confirmation.',
   'Prefer an existing food or recipe from context when its name matches. Reuse its exact name and nutrition.',
+  'A saved cookbook recipe is authoritative. Never replace or revise its nutrition merely because your estimate differs.',
   'For a one-off modifier such as extra oil, log the base dish and modifier separately; do not alter the saved base recipe.',
   'Only create a recipe when no suitable saved dish exists. A created dish must list practical ingredients separately.',
-  'Nutrition estimates must be conservative, normalized per 100 grams, and marked with lower confidence when uncertain.',
+  'Nutrition estimates must be conservative, normalized per 100 grams, and marked with lower confidence when uncertain. Never describe an uncited estimate as approved or verified.',
   'Use stable IDs from context for edits and deletes. Never invent a target ID.',
   'Ask one clarification only when a material ambiguity could cause a meaningfully wrong write.'
 ].join('\n');

@@ -2,11 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityEntry, AppState, BodyMetricLog, DailyGoal, FoodEntry, FoodItem, MealPlan, PendingOperation, Recipe, UserProfile } from '../types';
 import { STARTER_FOODS } from '../data/starterFoods';
 
-const KEY = 'fitness-app-state-v5';
-const LEGACY_KEYS = ['fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
+const KEY = 'fitness-app-state-v6';
+const LEGACY_KEYS = ['fitness-app-state-v5', 'fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
 
 export const EMPTY_STATE: AppState = {
-  version: 5,
+  version: 6,
   foods: [...STARTER_FOODS],
   entries: [],
   weights: [],
@@ -21,16 +21,24 @@ function migrate(input: Partial<AppState> & { version?: number }): AppState {
   const foods = new Map(STARTER_FOODS.map((food) => [food.id, food]));
   if (Array.isArray(input.foods)) for (const food of input.foods) foods.set(food.id, food);
   const fallbackTime: Record<string, string> = { breakfast: '08:00', lunch: '13:00', dinner: '19:00', snack: '16:00', other: '12:00' };
+  const weightsByDate = new Map<string, BodyMetricLog>();
+  if (Array.isArray(input.weights)) {
+    for (const weight of input.weights) {
+      const current = weightsByDate.get(weight.date);
+      if (!current || weight.enteredAt >= current.enteredAt) weightsByDate.set(weight.date, weight);
+    }
+  }
   return {
-    version: 5,
+    version: 6,
     profile: input.profile ? { ...input.profile, onboardingComplete: input.profile.onboardingComplete ?? true } : undefined,
     foods: [...foods.values()],
     entries: Array.isArray(input.entries) ? input.entries.map((entry) => ({ ...entry, eatenAt: entry.eatenAt || fallbackTime[entry.mealType] })) : [],
-    weights: Array.isArray(input.weights) ? input.weights : [],
+    weights: [...weightsByDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     activities: Array.isArray(input.activities) ? input.activities : [],
     goals: Array.isArray(input.goals) ? input.goals : [],
     plans: Array.isArray(input.plans) ? input.plans.map((plan) => ({ ...plan, items: plan.items.map((item) => ({ ...item, eatenAt: item.eatenAt || fallbackTime[item.mealType] })) })) : [],
     recipes: Array.isArray(input.recipes) ? input.recipes : [],
+    nutritionProgram: input.nutritionProgram,
     pendingOperations: Array.isArray(input.pendingOperations) ? input.pendingOperations : [],
     lastSyncedAt: input.lastSyncedAt
   };
@@ -71,7 +79,8 @@ export function upsertEntry(state: AppState, entry: FoodEntry): AppState {
 }
 
 export function upsertWeight(state: AppState, weight: BodyMetricLog): AppState {
-  return { ...state, weights: upsertById(state.weights, weight) };
+  const withoutSameDay = state.weights.filter((candidate) => candidate.date !== weight.date || candidate.id === weight.id);
+  return { ...state, weights: upsertById(withoutSameDay, weight).sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 export function upsertActivity(state: AppState, activity: ActivityEntry): AppState {
