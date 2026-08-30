@@ -2,22 +2,20 @@
 
 ## Start the local PC agent
 
-```bash
-cd "/home/ashar/Desktop/Codex proj/fitness/agent"
-AGENT_PAIRING_TOKEN="choose-a-long-random-token" npm start
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\agent
+npm run dev:env
 ```
 
 The agent listens on port `8787`. Keep it on your private network; do not forward this port to the public internet.
 
 ## Start Expo
 
-Find the PC's LAN address with `hostname -I`, then run:
+The current PC address is configured in `mobile/.env`. If the Wi-Fi network changes, find the new IPv4 address with `ipconfig` and update `EXPO_PUBLIC_AGENT_BASE_URL`, then run:
 
-```bash
-cd "/home/ashar/Desktop/Codex proj/fitness/mobile"
-EXPO_PUBLIC_AGENT_BASE_URL="http://YOUR_PC_LAN_IP:8787" \
-EXPO_PUBLIC_AGENT_PAIRING_TOKEN="choose-a-long-random-token" \
-npm start
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\mobile
+npm start -- --lan
 ```
 
 Open the QR code in Expo Go. The phone and PC must be on the same network. If search fails but local logging works, check the PC firewall and the LAN address.
@@ -36,14 +34,14 @@ Open the QR code in Expo Go. The phone and PC must be on the same network. If se
 
 ## Automated checks
 
-```bash
-cd "/home/ashar/Desktop/Codex proj/fitness/mobile"
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\mobile
 npm test
 npm run typecheck
 ```
 
-```bash
-cd "/home/ashar/Desktop/Codex proj/fitness/agent"
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\agent
 npm test
 npm run build
 ```

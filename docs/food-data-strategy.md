@@ -6,7 +6,7 @@
 2. Bundled staples: common ingredients plus Pakistani/South Asian foods guarantee useful search results even when the PC is unavailable.
 3. Open Food Facts: global packaged products, barcodes, ingredients, and label nutrition without an API key.
 4. USDA FoodData Central: generic foods and ingredients. The agent uses the official `DEMO_KEY` for low-volume testing and a private `USDA_API_KEY` for routine use.
-5. Codex resolver: optional fallback for regional dishes and unusual packet descriptions, always requiring confirmation.
+5. Groq agent: contextual fallback for regional dishes and unusual packet descriptions, always requiring confirmation.
 
 The local cache remains the product library. Online records are copied into local data only after they are selected, so frequently used foods remain available offline.
 
@@ -31,4 +31,3 @@ The local cache remains the product library. Online records are copied into loca
 - https://fdc.nal.usda.gov/download-datasets/
 - https://openfoodfacts.github.io/documentation/
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC7687679/
-

@@ -119,8 +119,6 @@ export async function audioStatus(): Promise<{ configured: boolean; retention: s
 export async function agentStatus(): Promise<{
   appAgent: { enabled: boolean; provider: string; busy: boolean; timeoutSeconds: number };
   foodAgent: { enabled: boolean; provider: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
-  codexAppAgent: { enabled: boolean; provider?: string; busy: boolean; timeoutSeconds: number };
-  codexFoodResolver: { enabled: boolean; provider?: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
 }> {
   return request('/v1/agent/status');
 }

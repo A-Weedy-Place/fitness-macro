@@ -67,43 +67,17 @@ The **Trends** tab includes:
 
 The **You** tab stores body profile inputs, computes Mifflin-St Jeor BMR/TDEE and macro targets, records body weight, manages local-agent settings, and shows integration health.
 
-## 5. Local voice transcription
+## 5. Groq voice transcription
 
-The required feature is speech-to-text (STT), not text-to-speech (TTS). This repository now includes a free local multilingual Faster Whisper server. Install it once from `agent/` (the model download is several hundred MB):
+The phone records speech-to-text audio and sends it to the paired PC agent. The agent forwards it directly to Groq's free-plan `whisper-large-v3-turbo` endpoint using the same private `GROQ_API_KEY` as the planner. There is no second voice server or local model to install.
 
-```bash
-npm run voice:setup
-```
+Audio is uploaded only after recording stops. The agent enforces a 25 MB limit, keeps request bytes in memory, and does not save raw audio. The mobile recording remains temporary and can be discarded after transcription.
 
-For normal use, start voice and the PC agent together:
+If Groq transcription is unavailable or its free limit is reached, barcode, typed search, custom food, and manual quick-add remain available.
 
-```bash
-npm run dev:full
-```
+## 6. Groq-assisted food resolution
 
-The default `base` multilingual model runs on CPU with int8 quantization and can auto-detect English/Urdu. Set `WHISPER_MODEL=small` before setup/start for better accuracy at the cost of a larger model and slower CPU transcription. The server binds only to `127.0.0.1`; the mobile app reaches it indirectly through the paired agent.
-
-Two local server styles are supported:
-
-- `LOCAL_TRANSCRIBE_MODE=whisper_cpp`: points to a whisper.cpp HTTP server. The agent sends in-memory multipart audio to `/inference` and requests JSON.
-- `LOCAL_TRANSCRIBE_MODE=openai_compatible`: points to a local OpenAI-compatible transcription server. The agent sends audio to `/v1/audio/transcriptions`.
-
-Audio is uploaded only after recording stops. The agent enforces a 25 MB limit, forwards bytes directly to the configured local service, and does not save raw audio. The mobile recording remains temporary and can be discarded after transcription.
-
-If transcription is unavailable, barcode, typed search, custom food, and manual quick-add remain available.
-
-## 6. Codex-assisted food resolution
-
-Set:
-
-```bash
-CODEX_FOOD_RESOLVER_ENABLED=true
-CODEX_FOOD_SEARCH=true
-```
-
-The resolver uses the existing logged-in `codex` CLI on this PC. It runs one read-only, non-interactive job at a time with a strict JSON output schema and timeout. Search is optional because product discovery may send the food description to internet search providers.
-
-Codex is used only to propose structured candidates. Open Food Facts/USDA and manual entry remain the fallback. Product-source URLs and confidence are kept so unusual regional dishes or packaged products can be checked before logging.
+Groq GPT-OSS receives only a compact selection of relevant saved foods, recipes, and diary entries. It proposes schema-validated actions, and the app requires confirmation before every write. Open Food Facts, the local USDA index, USDA's free endpoint, and manual entry remain available when the hosted model is unavailable or uncertain.
 
 ## 7. Strava
 
@@ -136,4 +110,4 @@ Imported calories are treated as estimates. When Strava does not provide usable 
 
 ## Known external setup boundaries
 
-The implementation is complete, but three optional features cannot become live without user-owned configuration: a running local transcription model, a logged-in Codex CLI with the resolver enabled, and Strava developer credentials. None is required for core diary, plan, weight, graph, or manual activity use.
+The hosted voice and planning path requires the user's Groq Free API key. Strava remains optional and requires user-owned developer credentials. Neither is required for core diary, plans, custom foods, weight, charts, or manual activity.

@@ -30,9 +30,8 @@ import { fetchOpenFoodFactsByBarcode, fetchOpenFoodFactsByQuery } from './provid
 import { fetchUsdaByQuery } from './providers/usda.js';
 import { localUsdaIndexStatus, searchLocalUsdaFoods } from './providers/localUsdaIndex.js';
 import { estimateTdee, mifflinStJeor, recommendDailyGoal } from './logic/tdee.js';
-import { transcribeAudio, transcriberStatus } from './providers/localTranscriber.js';
+import { transcribeAudio, transcriberStatus } from './providers/groqTranscriber.js';
 import { completeStravaAuthorization, createStravaAuthorizationUrl, fetchStravaActivities, stravaStatus } from './integrations/strava.js';
-import { codexGoalAdvisorStatus, reviewGoalWithCodex } from './providers/codexGoalAdvisor.js';
 import { appAgentStatus, planAppCommand } from './providers/appAgent.js';
 import { foodAgentStatus, resolveFoodWithAgent } from './providers/foodAgent.js';
 
@@ -117,7 +116,7 @@ app.get('/v1/audio/status', (_req, res) => {
 app.get('/v1/agent/status', (_req, res) => {
   const appAgent = appAgentStatus();
   const foodAgent = foodAgentStatus();
-  res.json({ appAgent, foodAgent, codexAppAgent: appAgent, codexFoodResolver: foodAgent, codexGoalAdvisor: codexGoalAdvisorStatus(), localIngredientIndex: localUsdaIndexStatus() });
+  res.json({ appAgent, foodAgent, localIngredientIndex: localUsdaIndexStatus() });
 });
 
 app.post('/v1/assistant/plan', async (req, res) => {
@@ -127,7 +126,7 @@ app.post('/v1/assistant/plan', async (req, res) => {
     res.json(await planAppCommand(parsed.data.command, parsed.data.context));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'assistant_planning_failed';
-    res.status(message === 'codex_app_agent_busy' ? 409 : message === 'codex_app_agent_disabled' ? 503 : 502).json({ error: message });
+    res.status(message === 'groq_not_configured' ? 503 : 502).json({ error: message });
   }
 });
 
@@ -166,7 +165,7 @@ app.post('/v1/audio/transcribe', express.raw({ type: ['audio/*', 'application/oc
     res.json({ ...result, retained: false });
   } catch (error) {
     const code = error instanceof Error ? error.message : 'transcription_failed';
-    res.status(code === 'transcriber_not_configured' ? 503 : 502).json({ error: code });
+    res.status(code === 'groq_not_configured' ? 503 : 502).json({ error: code });
   }
 });
 
@@ -341,18 +340,12 @@ app.post('/v1/goals/recommendation', async (req, res) => {
   const bmr = mifflinStJeor(profile);
   const tdee = profile.adaptiveTdee || estimateTdee(bmr, profile.activityFactor);
   const goal = recommendDailyGoal(profile, date);
-  let review = {
+  const review = {
     summary: `The ${goal.calories} kcal target starts from an estimated ${tdee} kcal maintenance level and a bounded ${profile.weeklyWeightChangeKg} kg weekly direction.`,
     actions: ['Log food consistently before making adjustments.', 'Review the rolling weight trend after at least two weeks.', 'Keep activity calories visible rather than automatically eating them back.'],
     cautions: ['Estimates are not medical advice; stop and seek qualified guidance if the plan causes concerning symptoms.'],
     aiGenerated: false
   };
-  try {
-    const ai = await reviewGoalWithCodex(profile, goal, tdee);
-    if (ai) review = { ...ai, aiGenerated: true };
-  } catch (error) {
-    console.warn(`[agent] Codex goal advisor fallback: ${error instanceof Error ? error.message : 'unknown error'}`);
-  }
   res.json({ goal, bmr, tdee, review });
 });
 

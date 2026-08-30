@@ -6,11 +6,10 @@ import { join } from 'node:path';
 import { CustomFoodSchema, MealPlanSchema } from '../src/contracts.js';
 import { estimateTdee, mifflinStJeor, recommendDailyGoal } from '../src/logic/tdee.js';
 import { estimateStravaCalories } from '../src/integrations/strava.js';
-import { codexResolverStatus } from '../src/providers/codexFoodResolver.js';
-import { mapFoodAgentResult } from '../src/providers/codexFoodResolver.js';
+import { mapFoodAgentResult } from '../src/providers/foodAgent.js';
 import { compactAppContext } from '../src/providers/appContext.js';
 import { groqStatus } from '../src/providers/groqJson.js';
-import { enforceAppPlan } from '../src/providers/groqAppAgent.js';
+import { enforceAppPlan } from '../src/providers/appAgent.js';
 
 test('agent validates custom foods and reusable plans', () => {
   const food = CustomFoodSchema.parse({ clientId: 'food_1', name: 'Roti', serving: { unit: 'piece', amount: 1, gramsPerUnit: 45 }, nutrition: { calories: 260, protein: 8, carbs: 50, fat: 3 } });
@@ -48,15 +47,6 @@ test('Strava calorie fallback uses activity-specific estimates', () => {
   assert.equal(estimateStravaCalories({ sport_type: 'Run', moving_time: 3600, distance: 10_000 }, 75), 750);
   assert.equal(estimateStravaCalories({ sport_type: 'Ride', moving_time: 3600 }, 75), 600);
   assert.equal(estimateStravaCalories({ sport_type: 'Walk', moving_time: 1800, calories: 123 }, 75), 123);
-});
-
-test('Codex resolver is opt-in and reports its execution boundary', () => {
-  const previous = process.env.CODEX_FOOD_RESOLVER_ENABLED;
-  process.env.CODEX_FOOD_RESOLVER_ENABLED = 'false';
-  assert.equal(codexResolverStatus().enabled, false);
-  assert.equal(codexResolverStatus().busy, false);
-  if (previous === undefined) delete process.env.CODEX_FOOD_RESOLVER_ENABLED;
-  else process.env.CODEX_FOOD_RESOLVER_ENABLED = previous;
 });
 
 test('assistant context keeps relevant foods without sending full history', () => {

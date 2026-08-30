@@ -3,7 +3,8 @@
 ## Free Groq provider and token-budget checkpoint - 2026-08-30
 
 - Zero required spend is a hard product constraint. The recommended development path keeps the Groq account on its Free plan without a payment method.
-- Added provider-agnostic app and food-agent routing: Groq is preferred when `GROQ_API_KEY` exists, Codex CLI remains an optional fallback, and deterministic food resolution remains the final fallback.
+- Simplified the runtime to one AI provider: Groq handles Whisper transcription and GPT-OSS planning. All former Codex CLI spawning, provider selection, fallback, goal-advisor code, settings, and status aliases were removed; deterministic nutrition lookup remains the non-AI fallback.
+- Removed the unused local Faster-Whisper/Python service, alternate transcription modes, and combined startup scripts. `GROQ_API_KEY` is now the only AI credential and directly powers the fixed `whisper-large-v3-turbo` transcription endpoint.
 - Groq Whisper Large V3 Turbo can use the same private server-side key as the GPT-OSS reasoning model. The key must never enter an `EXPO_PUBLIC_*` variable.
 - Added compact local retrieval before inference: current-day entries plus a few relevant historical entries, top matching recipes/foods, a hard context-character budget, low reasoning effort, capped output, and terminal token-usage reporting.
 - Paid Groq Compound/web/browser-search tools are deliberately excluded. Existing local foods, USDA index/API, and Open Food Facts remain the no-cost nutrition path.
@@ -20,7 +21,7 @@
 - Local persistence: AsyncStorage-backed typed store in-app (for MVP) and agent-side atomic JSON DB with versioned migrations.
 - Nutrition sources: local food library first, optional remote fallback via Open Food Facts and USDA FoodData Central.
 - Strava integration: deferred to phase-2/after-phase-1 stabilization.
-- Voice/LLM: on-device capture + optional local/hosted LLM parsing through personal agent API.
+- Voice/LLM: on-device capture sent through the paired PC agent to Groq Whisper, followed by Groq GPT-OSS planning.
 - No paid dependency required for food search/barcode for baseline.
 
 ## Unresolved risks

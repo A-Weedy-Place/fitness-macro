@@ -57,7 +57,7 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
     </View>
 
     <Card>
-      <SectionTitle title="Plan reasoning" detail={review?.review.aiGenerated ? 'Codex reviewed' : 'calculated locally'} />
+      <SectionTitle title="Plan reasoning" detail="calculated locally" />
       <View style={styles.formula}><Text style={styles.formulaValue}>{tdee}</Text><Text style={styles.formulaLabel}>maintenance</Text><Text style={styles.formulaOperator}>{(goal?.calories || tdee) < tdee ? '−' : '+'}</Text><Text style={styles.formulaValue}>{Math.abs((goal?.calories || tdee) - tdee)}</Text><Text style={styles.formulaLabel}>adjustment</Text><Text style={styles.formulaOperator}>=</Text><Text style={styles.formulaValue}>{goal?.calories || '—'}</Text><Text style={styles.formulaLabel}>daily target</Text></View>
       <Text style={styles.reviewSummary}>{review?.review.summary || 'Your target uses Mifflin-St Jeor, your selected activity level, and a bounded weekly rate. Ask the local AI for a plain-language review and practical actions.'}</Text>
       {review?.review.actions.map((action) => <Text key={action} style={styles.reviewItem}>• {action}</Text>)}

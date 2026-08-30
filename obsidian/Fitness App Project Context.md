@@ -7,7 +7,8 @@ updated: 2026-08-30
 ## Free Groq and efficient-agent checkpoint - 2026-08-30
 
 - New development constraint: speech and reasoning must require no additional subscription or API payment.
-- Groq Free is the preferred hosted development provider for Whisper transcription and GPT-OSS food planning; Codex CLI stays available only as an optional fallback.
+- Groq Free is the only AI runtime provider for Whisper transcription and GPT-OSS food planning. The former Codex CLI process, fallback, goal-advisor, provider-selection, settings, and status code has been removed.
+- The unused local Faster-Whisper/Python service and alternate transcription modes were also removed. The private `GROQ_API_KEY` now directly powers the fixed `whisper-large-v3-turbo` endpoint.
 - The agent now compacts the mobile snapshot to relevant local foods, recipes, and diary records before inference instead of transmitting the full history.
 - Token controls include a context ceiling, low reasoning effort, output cap, stable cacheable prompts, and logged usage.
 - Paid hosted web-search tools are disabled. Broader recipe search, if needed, should use optional self-hosted SearXNG.
@@ -21,7 +22,7 @@ updated: 2026-08-30
 - Local persistence: AsyncStorage-backed typed store in-app (for MVP) and agent-side atomic JSON DB with versioned migrations.
 - Nutrition sources: local food library first, optional remote fallback via Open Food Facts and USDA FoodData Central.
 - Strava integration: deferred to phase-2/after-phase-1 stabilization.
-- Voice/LLM: on-device capture + optional local/hosted LLM parsing through personal agent API.
+- Voice/LLM: on-device capture sent through the paired PC agent to Groq Whisper, followed by Groq GPT-OSS planning.
 - No paid dependency required for food search/barcode for baseline.
 
 ## Unresolved risks

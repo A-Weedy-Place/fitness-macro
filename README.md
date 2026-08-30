@@ -10,20 +10,18 @@ Goal: deliver a mobile-first nutrition workflow similar to MacroFactor/FitnessPa
 ## Runbook (bootstrap)
 1. Start agent service:
 
-```bash
-cd /home/ashar/Desktop/Codex\ proj/fitness/agent
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\agent
 npm install
-AGENT_PAIRING_TOKEN=your-long-random-token npm start
+npm run dev:env
 ```
 
 2. Start mobile app:
 
-```bash
-cd /home/ashar/Desktop/Codex\ proj/fitness/mobile
+```powershell
+Set-Location C:\Users\pc\Desktop\UwU\fitness\mobile
 npm install
-EXPO_PUBLIC_AGENT_BASE_URL=http://<pc-ip>:8787 \
-EXPO_PUBLIC_AGENT_PAIRING_TOKEN=your-token \
-npm start
+npm start -- --lan
 ```
 
 3. Open in Expo Go on phone or simulator.
@@ -50,12 +48,12 @@ npm start
 ## Planned milestones
 - Phase 0: local schema + agent contract + offline-first baseline
 - Phase 1: diary + macro math + weight trend + recipe support
-- Phase 2: local voice/LLM extraction path + confidence-based confirmation
+- Phase 2: Groq voice/LLM extraction path + confidence-based confirmation
 - Phase 3: optional Strava OAuth/activity import
 - Phase 4: polish, export/import, conflict resolution
 
 ## Data schema version
-- Current version in store: `4`
+- Current version in store: `5`
 
 ## Current mobile experience
 

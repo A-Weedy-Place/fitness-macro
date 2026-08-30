@@ -86,7 +86,7 @@ function FitnessApp() {
   const [status, setStatus] = useState('All data is stored locally first.');
   const [strava, setStrava] = useState<StravaStatus | null>(null);
   const [audioConfigured, setAudioConfigured] = useState<boolean | null>(null);
-  const [codexResolverEnabled, setCodexResolverEnabled] = useState<boolean | null>(null);
+  const [appAgentEnabled, setAppAgentEnabled] = useState<boolean | null>(null);
   const [goalReview, setGoalReview] = useState<GoalReviewResponse | null>(null);
   const [healthConnect, setHealthConnect] = useState<HealthConnectStatus | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
@@ -423,7 +423,7 @@ function FitnessApp() {
     try {
       const review = await getGoalRecommendation(state.profile);
       setGoalReview(review);
-      setStatus(review.review.aiGenerated ? 'Goal reviewed by your local Codex advisor.' : 'Goal reviewed with the offline safety calculation.');
+      setStatus('Goal reviewed with the local safety calculation.');
     } catch {
       setStatus('PC advisor unavailable. Your deterministic calorie target remains active.');
     }
@@ -516,11 +516,11 @@ function FitnessApp() {
       const [stravaResult, audioResult, agentResult] = await Promise.all([getStravaStatus(), audioStatus(), agentStatus()]);
       setStrava(stravaResult);
       setAudioConfigured(audioResult.configured);
-      setCodexResolverEnabled(agentResult.appAgent.enabled);
+      setAppAgentEnabled(agentResult.appAgent.enabled);
     } catch {
       setStrava(null);
       setAudioConfigured(null);
-      setCodexResolverEnabled(null);
+      setAppAgentEnabled(null);
     }
   }
 
@@ -572,7 +572,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} codexResolverEnabled={codexResolverEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

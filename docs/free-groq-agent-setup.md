@@ -28,19 +28,9 @@ AGENT_PAIRING_TOKEN=replace-with-your-long-private-token
 
 GROQ_API_KEY=gsk_your_private_key
 GROQ_AGENT_MODEL=openai/gpt-oss-120b
-APP_AGENT_PROVIDER=auto
-FOOD_AGENT_PROVIDER=auto
-
-LOCAL_TRANSCRIBE_URL=https://api.groq.com/openai
-LOCAL_TRANSCRIBE_MODE=openai_compatible
-LOCAL_TRANSCRIBE_MODEL=whisper-large-v3-turbo
-LOCAL_TRANSCRIBE_KEY=
-
-CODEX_FOOD_RESOLVER_ENABLED=false
-CODEX_FOOD_SEARCH=false
 ```
 
-`LOCAL_TRANSCRIBE_KEY` is intentionally blank: the agent safely reuses `GROQ_API_KEY` for Groq transcription. Never put `GROQ_API_KEY` in an `EXPO_PUBLIC_*` mobile variable or commit `agent/.env`.
+The same private `GROQ_API_KEY` powers both GPT-OSS planning and Whisper transcription. Never put it in an `EXPO_PUBLIC_*` mobile variable or commit `agent/.env`.
 
 Start the service with the Windows-friendly command that loads `.env`:
 
@@ -58,11 +48,21 @@ Keep this terminal running while the phone uses the agent.
 - Packaged foods: Open Food Facts, no key.
 - Generic nutrition: local USDA index first, then USDA `DEMO_KEY` unless a free data.gov key is supplied.
 - Saved foods, recipes, calculations, confirmation, and writes: local app/PC code.
-- Codex CLI: disabled by this setup, but remains an optional fallback for the subscription the developer already owns.
 
 The implementation never calls Groq Compound, Groq web search, browser search, or other metered tools. A Free account stops at its rate limit instead of using a paid capacity tier.
 
 ## 4. Token controls
+
+### Current Free-plan limits (checked 2026-08-30)
+
+| Model | Requests/min | Requests/day | Token or audio limit |
+| --- | ---: | ---: | --- |
+| `openai/gpt-oss-120b` | 30 | 1,000 | 8,000 tokens/min and 200,000 tokens/day |
+| `whisper-large-v3-turbo` | 20 | 2,000 | 7,200 audio seconds/hour and 28,800 audio seconds/day |
+
+Groq applies whichever limit is reached first at the organization level. At five voice logs per day, the normal flow uses about five Whisper requests and five GPT-OSS requests. Live project tests used roughly 1,200-1,300 input tokens plus 535-717 output tokens per planning request, so this personal-use pattern is far below the daily limits. Avoid firing several planning requests simultaneously because the 8,000-token-per-minute limit can still cause a temporary `429` response.
+
+Prompt caching is automatic for GPT-OSS, has no setup fee, and cached tokens do not count toward rate limits. Limits can change; the account's Groq Console limits page is authoritative.
 
 The PC agent reduces each command before sending it to Groq:
 
