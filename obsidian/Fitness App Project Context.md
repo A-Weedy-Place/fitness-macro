@@ -23,6 +23,7 @@ updated: 2026-08-30
 - The Food tab now shows true Recent foods, My cookbook, and Reference catalog separately; recipes show Personal recipe vs AI estimate provenance. An AI estimate never overwrites saved cookbook nutrition.
 - `docs/food-data-strategy.md` documents free/attributed sources: local/USDA first, IFCT 2017 planned for South Asian ingredients, and RecipeDB excluded for its non-commercial licence.
 - `mobile/eas.json` defines EAS development and installable preview APK profiles. Android LAN HTTP is enabled intentionally for the paired PC agent.
+- Expo project linked as `@a-weedy-place/fitness-macro` (project ID `714cf37d-459a-4408-b025-1334f0bfc779`). Preview APK build `19f9ec60-9684-4a18-b68d-d589b5768dd0` was submitted on 2026-08-30 and was still `IN_PROGRESS` at the last check; use the EAS build list command in `mobile/` to retrieve its artifact when complete.
 - Live agent test produced a Pakistani three-meal structure while holding the local target at 2,147 kcal / 148 g protein. Mobile type-check + 12 tests and agent build + 8 tests pass.
 
 ## Free Groq and efficient-agent checkpoint - 2026-08-30

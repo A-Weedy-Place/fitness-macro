@@ -20,6 +20,7 @@
 - The Food screen now uses true most-recently-eaten ordering and distinct **Recent**, **My cookbook**, and **Reference catalog** sections. Food/recipe provenance is shown as Personal recipe, AI estimate, or a reference source; AI-generated recipes are never called approved unless a future explicitly attributed review is stored.
 - `docs/food-data-strategy.md` records the no-cost data and licence strategy. USDA/local ingredient data remain the primary facts; IFCT 2017 is the planned South Asian ingredient expansion; RecipeDB is excluded because its non-commercial licence is unsuitable for a future product.
 - `mobile/eas.json` now provides free EAS `development` and installable `preview` APK profiles. Android clear-text LAN traffic is explicitly enabled because the app intentionally talks to the paired PC agent over local Wi-Fi.
+- Expo project created and linked as `@a-weedy-place/fitness-macro` (project ID `714cf37d-459a-4408-b025-1334f0bfc779`). Preview APK build `19f9ec60-9684-4a18-b68d-d589b5768dd0` was submitted on 2026-08-30 and was still `IN_PROGRESS` at the last check; retrieve it with `cd mobile && npm exec --yes --package=eas-cli -- eas build:list --platform android --limit 1` after it completes.
 - Live agent validation succeeded after this change: the goal endpoint returned a 3-meal Pakistani structure with a locked 2,147 kcal / 148 g protein target. Mobile type-check + 12 tests and agent build + 8 tests pass.
 
 ## Free Groq provider and token-budget checkpoint - 2026-08-30
