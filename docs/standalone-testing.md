@@ -11,7 +11,7 @@
 1. Install the preview APK and complete onboarding with realistic body, activity, cuisine, and goal details.
 2. Confirm the starting meal structure appears in **Goals** and that its calorie/protein targets match onboarding values.
 3. In **Food**, type: `two whole wheat rotis with one plate mash ki dal at 1 PM`. Review the proposed items, then confirm. Check that both foods appear at 1 PM.
-4. Repeat by voice. Raw audio must not be retained; only the returned transcript is used.
+4. Repeat by voice. The microphone is a small button beside the text field: record, stop, review/edit the transcript, then deliberately tap **Ask AI**. It must not send, plan, or log automatically. Raw audio must not be retained.
 5. Ask the AI to add a one-off modifier such as `I had aloo keema with one extra tablespoon of oil`. Confirm that oil is a separate diary item rather than a changed saved recipe.
 6. Ask it to correct an entry time, delete an entry, and log today’s weight. Confirm it asks before applying each change and that only one weight remains for the day.
 7. In **You → Connections**, confirm Voice assistant and Food agent show ready without a PC-link form. Health Connect can be connected separately.
@@ -26,6 +26,7 @@
 5. In **You → Date & time**, leave **Device time** selected (or choose Pakistan UTC+5), then log food around local midnight. It must use the visible local calendar day.
 6. In **You → Appearance**, select another palette. The app may restart once, then must reopen in the selected palette.
 7. In **You → Connections → Connect Health**, the Android Health Connect permission screen or a clear result dialog must appear. If it says Health Connect is unavailable, first confirm the phone supports it, it is installed/up to date, and the phone has a screen lock.
+8. In **AI**, ask to log a food. The result must say it is not yet applied; tap **Apply**. The app must open **Today** on the affected date and show the entry there. Repeat once in quick food logging with **Ask AI → Apply AI log**.
 
 ## Free-service behavior
 

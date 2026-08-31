@@ -1,24 +1,20 @@
-# Voice + LLM pipeline (offline-first friendly)
+# Voice architecture
 
-## End-to-end flow
-1. Mobile records speech to AAC/wav.
-2. App uploads audio to local agent endpoint `/v1/audio/transcribe` (to be added).
-3. Agent runs local transcriber (Whisper.cpp/Whisper API) and gets transcript.
-4. Transcript goes to `/v1/foods/resolve`.
-5. App shows ranked candidates with confidence and source.
-6. User confirms or edits before final persistence.
+## Current production flow
 
-## Why not direct external APIs first
-- Cost control and regional food variation support.
-- No privacy leakage of raw audio and health context.
-- Offline behavior for repeated meals and local foods.
+1. The Android app records temporary audio after the owner taps its compact microphone button.
+2. The APK sends that audio by HTTPS to the private FitnessMacro Cloudflare Worker.
+3. The Worker uses its server-side Groq credential to call `whisper-large-v3-turbo` and returns only the transcript.
+4. The app places the transcript into its editable text field. Nothing is sent to the reasoning model and no food is logged at this point.
+5. The owner deliberately edits the text and taps **Search**, **Ask AI**, or **Send**. Only those actions may call the GPT-OSS food agent.
+6. Any action plan remains a proposal until the owner taps **Apply**. The app writes approved changes to its own local database.
 
-## Privacy baseline
-- Keep raw audio under a retention window (`14` days default).
-- Optional local encryption before filesystem write.
-- Keep transcripts for `24` hours only unless user explicitly keeps them.
+## Privacy and product boundary
 
-## Immediate next code tasks
-- Add local `AgentJob` table + worker queue in `agent`.
-- Add transcribe endpoint + parser adapter in `agent`.
-- Add `voice` screen in `mobile` to record and poll job status.
+- The runtime path is `APK → private HTTPS relay → Groq`; there is no PC, LAN address, paired local agent, Codex CLI, or on-device Whisper model.
+- The Worker stores no raw audio, transcript, diary, profile, or recipe data. The app does not retain raw audio after transcription.
+- The APK has no Groq API key. The Worker owns the encrypted server-side secret; an APK-only relay token is a rotatable private-preview safeguard, not public-release authentication.
+
+## Design rule
+
+Speech capture is an input method, not an autonomous command. It must remain compact, editable, and confirmation-gated so the owner always sees what will be searched or applied.

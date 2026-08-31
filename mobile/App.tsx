@@ -254,7 +254,9 @@ function FitnessApp() {
     if (plan.intent === 'log_foods') {
       const items = plan.items.map((item) => resolvedById.get(item.foodId)).filter((food): food is FoodItem => Boolean(food)).map((food) => ({ food, quantity: plan.items.find((item) => item.foodId === food.id)?.quantity || food.serving.amount, note: `AI resolved from: ${resolution.transcript}` }));
       if (!items.length) throw new Error('The assistant could not match a reliable food.');
-      await addPlate(items, plan.log.eatenAt || fallbackTime, plan.log.date || date);
+      const logDate = plan.log.date || date;
+      await addPlate(items, plan.log.eatenAt || fallbackTime, logDate);
+      setDate(logDate);
       return;
     }
     const ingredients = plan.items.filter((item) => resolvedById.has(item.foodId)).map((item) => ({ foodId: item.foodId, quantity: item.quantity, unit: item.unit }));
@@ -278,6 +280,7 @@ function FitnessApp() {
     for (const resolved of resolution.foods) next = upsertFood(next, resolved);
     next = upsertEntry(upsertRecipe(upsertFood(next, food), recipe), entry);
     await commit(next, `${food.name} created, saved, and logged`);
+    setDate(logDate);
   }
 
   function changeTheme(theme: AppThemeName) {
@@ -342,7 +345,7 @@ function FitnessApp() {
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: plan.reply, createdAt: now() }]);
       setAssistantPlan(plan.actions.length ? plan : null);
     } catch (error) {
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: error instanceof Error ? error.message : 'The local agent could not prepare a plan.', createdAt: now() }]);
+      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: error instanceof Error ? error.message : 'The assistant could not prepare a plan.', createdAt: now() }]);
     } finally {
       setAssistantBusy(false);
     }
@@ -355,6 +358,7 @@ function FitnessApp() {
       let next = state;
       let appliedChanges = 0;
       let destination: TabKey | null = null;
+      let diaryDate: string | null = null;
       const timestamp = now();
       const foodFor = (ingredient: AssistantAction['ingredients'][number]): FoodItem => {
         const existing = next.foods.find((food) => food.name.toLowerCase() === ingredient.name.toLowerCase() && (food.brand || '').toLowerCase() === (ingredient.brand || '').toLowerCase());
@@ -369,6 +373,7 @@ function FitnessApp() {
         const portion = { foodId: food.id, quantity, unit: food.serving.unit };
         next = upsertEntry(next, { id, date: entryDate, eatenAt, mealType, foodId: food.id, portion, note, enteredAt: timestamp, source: { source: 'llm', confidence: 1 } });
         appliedChanges += 1;
+        diaryDate = entryDate;
       };
       for (const action of assistantPlan.actions) {
         const actionDate = action.date || date; const actionTime = action.time || currentTime(next.profile?.timeZone);
@@ -392,9 +397,11 @@ function FitnessApp() {
           next = upsertActivity(next, { id, date: actionDate, name: action.name, type: action.name.toLowerCase(), durationMinutes: action.durationMinutes, caloriesEstimated: calories, source: 'manual', createdAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'change_entry_time' && action.targetId) {
           const entry = next.entries.find((item) => item.id === action.targetId); if (!entry) continue;
-          const updated = { ...entry, date: actionDate || entry.date, eatenAt: actionTime, mealType: mealForTime(actionTime) };
+          const entryDate = action.date || entry.date;
+          const updated = { ...entry, date: entryDate, eatenAt: actionTime, mealType: mealForTime(actionTime) };
+          diaryDate = entryDate;
           next = upsertEntry(next, updated); appliedChanges += 1;
-        } else if (action.type === 'delete_entry' && action.targetId) { next = removeEntry(next, action.targetId); appliedChanges += 1; }
+        } else if (action.type === 'delete_entry' && action.targetId) { const entry = next.entries.find((item) => item.id === action.targetId); if (!entry) continue; diaryDate = entry.date; next = removeEntry(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'delete_weight' && action.targetId) { next = removeWeight(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'delete_activity' && action.targetId) { next = removeActivity(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'set_goal' && action.calories != null && action.protein != null && action.carbs != null && action.fat != null) {
@@ -407,12 +414,13 @@ function FitnessApp() {
         } else if (action.type === 'apply_plan' && action.targetId) {
           const plan = next.plans.find((item) => item.id === action.targetId); if (!plan) continue;
           const entries = instantiatePlan({ plan, date: actionDate, now: timestamp, makeEntryId: () => makeId('entry') });
-          for (const entry of entries) { next = upsertEntry(next, entry); appliedChanges += 1; }
+          for (const entry of entries) { next = upsertEntry(next, entry); appliedChanges += 1; diaryDate = entry.date; }
         } else if (action.type === 'delete_plan' && action.targetId) { next = removePlan(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'navigate' && action.destination) destination = action.destination;
       }
       if (appliedChanges) await commit(next, `Assistant applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'}`);
-      if (destination) changeTab(destination);
+      if (diaryDate) { setDate(diaryDate); changeTab('today'); }
+      else if (destination) changeTab(destination);
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: `Applied ${assistantPlan.actions.length} approved action${assistantPlan.actions.length === 1 ? '' : 's'}.`, createdAt: now() }]);
       setAssistantPlan(null);
     } catch (error) {

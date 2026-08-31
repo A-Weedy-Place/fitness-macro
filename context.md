@@ -57,6 +57,14 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Deleted the obsolete ignored mobile `.env` that contained a previous PC address/pairing token. No mobile runtime reads any PC URL or pairing variable.
 - Validation before the replacement preview build: `npm run typecheck` passes, **13/13** mobile tests pass (including local-calendar and Monday-week coverage), `expo config` resolves the three Health Connect permissions, `expo-updates` is installed at the Expo SDK-compatible version, and `git diff --check` passes. Canonical preview build `2748e908-771b-4f73-aad9-1e3145942d29` from commit `41bfd42` finished successfully: `https://expo.dev/artifacts/eas/-dvLRhIbi5kZhkZ6dfmIysGT9MJq-RO7JDu2EVf8jJs.apk` (expires 2026-09-14). A duplicate job produced the same artifact fingerprint and can be ignored.
 
+## Voice and confirmation correction stage — 2026-08-31
+
+- **Voice is transcription only.** Every capture surface now uses one compact microphone button directly beside the editable text field. Tap once to record and again to stop; Whisper returns text to that field. Recording never sends a prompt, calls the food agent, or changes the diary by itself.
+- The owner may edit the returned transcript, then deliberately choose **Search**, **Ask AI**, or **Send**. This keeps manual food lookup fully usable and prevents a speech capture from creating a chain of unexpected replies.
+- AI plans state that they have not changed anything yet and use an explicit **Apply** action rather than ambiguous confirmation wording. A confirmed action that creates, changes, or removes a diary entry opens **Today** at the exact affected date, so the result is immediately visible. A quick-log AI plan follows the same apply-only rule.
+- `mobile/src/components/VoiceRecorder.tsx` is now only an audio capture/transcription control. The remote request still travels APK → private HTTPS relay → Groq; no PC is involved and raw audio is not retained.
+- Validation for this stage: mobile `npm run typecheck` passed. The next preview APK must test compact voice capture, editable transcript, deliberate AI apply, and diary navigation after an AI log.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this section synchronized with `obsidian/Fitness App Project Context.md` whenever the user makes a material product decision or a feature is completed.

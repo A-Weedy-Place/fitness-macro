@@ -58,6 +58,13 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - The stale ignored mobile `.env` containing an old PC URL/pairing token was deleted. There is no mobile PC runtime path.
 - Validation: `npm run typecheck`, **13/13** mobile tests (including local-calendar/Monday-week coverage), Android config permission inspection, SDK-compatible `expo-updates`, and `git diff --check` pass. Canonical preview build `2748e908-771b-4f73-aad9-1e3145942d29` from `41bfd42` finished successfully: `https://expo.dev/artifacts/eas/-dvLRhIbi5kZhkZ6dfmIysGT9MJq-RO7JDu2EVf8jJs.apk` (expires 2026-09-14). Its accidental duplicate has the same artifact fingerprint.
 
+## Voice and confirmation correction stage — 2026-08-31
+
+- Voice capture is now a compact microphone button beside the text input on the Assistant, quick food log, and Food library screens. Tap to start, tap again to stop; it only converts speech to editable text.
+- A transcript does **not** send itself to the AI, resolve food, or write any diary data. The owner chooses the next action by tapping **Send**, **Search**, or **Ask AI** after reviewing/editing the text.
+- AI changes are clearly marked as not yet applied. The owner must tap **Apply**. Diary-affecting assistant actions then show **Today** at the exact date that changed, making a successful food/time/delete action directly verifiable.
+- This remains APK → private HTTPS relay → Groq Whisper/GPT-OSS with no PC connection and no retained raw audio. Mobile type checking passed before the replacement APK build.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this note and `context.md` synchronized after every material product decision or completed feature.
