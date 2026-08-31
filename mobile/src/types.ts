@@ -64,7 +64,7 @@ export interface ActivityEntry {
   id: string;
   date: string;
   name: string;
-  source: 'strava' | 'manual';
+  source: 'strava' | 'health_connect' | 'manual';
   type: string;
   durationMinutes: number;
   distanceMeters?: number;
@@ -185,6 +185,8 @@ export interface UserProfile {
   onboardingComplete?: boolean;
   preferredHeightUnit?: 'cm' | 'ft';
   preferredWeightUnit?: 'kg' | 'lb';
+  /** `device` follows the phone. Any valid IANA zone is also accepted. */
+  timeZone?: string;
   adaptiveTdee?: number;
   adaptiveTdeeUpdatedAt?: string;
   dietStyle?: 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian';

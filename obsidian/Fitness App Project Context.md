@@ -48,6 +48,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Android clear-text traffic is disabled because AI/reference traffic uses HTTPS. The Worker gives the app a 60-request/hour per-warm-isolate cap, a 6,000-character local context ceiling, and a 1,000-token GPT-OSS response cap.
 - Validation: relay TypeScript, mobile TypeScript, and 12 local tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call hit Groq’s expected free-tier `429`; normal personal use should avoid rapid bursts.
 
+## APK feedback correction stage — 2026-08-31
+
+- Physical-phone testing confirmed that the direct Groq relay is live, but also exposed product issues that Expo Go did not prove. This stage fixes those behaviors before the next preview APK.
+- **Calendar/clock:** default diary dates follow the phone clock instead of UTC. **You → Date & time** stores either Device time or a valid IANA override (including `Asia/Karachi`). Today always shows Monday–Sunday; arrows move by a whole week.
+- **Manual food control:** catalogue failure cannot block local cookbook/reference search. Tap a logged diary item to edit only that item’s amount, unit, note, date, or time. Custom food and dish builder remain available without AI.
+- **Adaptive plan:** after 14 calendar dates, 10 food-log days, and weights across the interval, observed maintenance may update no more than weekly, at ≤100 kcal/day per step. Missing data never lowers targets. Method details are collapsible.
+- **Account panels:** account Goal plan and Progress panels no longer jump to the main tab bar. Themes use production-safe `expo-updates` restart. Health Connect now declares its three read permissions, reads all allowed Health Connect origins, and shows an explicit result dialog.
+- The stale ignored mobile `.env` containing an old PC URL/pairing token was deleted. There is no mobile PC runtime path.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this note and `context.md` synchronized after every material product decision or completed feature.
@@ -58,8 +67,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Current login scope is deliberately local and free: an optional 4–8 digit PIN in encrypted Expo SecureStore locks the app after backgrounding. It has no cloud identity, email/Google sign-in, recovery, or cross-device behavior. A real account requires a future authenticated backend.
 - Themes: Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. The app follows device brightness rather than changing it.
 - New Expo native dependencies/config cover system navigation-bar hiding, local photo selection, and encrypted PIN storage. Rebuild the APK to test native behavior realistically; Expo Go remains useful for UI iteration.
-- **You → Connections → PC agent link** now stores the PC URL locally and the pairing token in encrypted SecureStore. A release APK therefore does not bake in local Wi-Fi details and does not need rebuilding after an IP change. Current 2026-08-31 PC Wi-Fi address: `http://192.168.18.113:8787` (transient; update it in the phone form after any network change).
-- The background PC agent was restarted and verified through that LAN address: Groq GPT-OSS planning enabled, paid tools disabled, and 7,756 local ingredients indexed.
+- There is no PC link, saved Wi-Fi address, pairing token, or desktop agent in the shipped mobile path. The preview APK reaches only the private HTTPS relay.
 - Verification: mobile type-check + 12 tests and agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30

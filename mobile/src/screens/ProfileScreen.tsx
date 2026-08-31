@@ -3,19 +3,21 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Image, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { AppState, ProfileInput } from '../types';
-import { Button, Card, Chip, ChipRow, Field, Page, ScreenHeader, SectionTitle, TabKey } from '../components/ui';
+import { Button, Card, Chip, ChipRow, Field, Page, ScreenHeader, SectionTitle } from '../components/ui';
 import { CalendarPicker } from '../components/CalendarPicker';
 import { buildDailySeries, latestWeightByDate } from '../logic/analytics';
 import { weeklyChangeForGoal } from '../logic/goals';
 import { cmToFeetInches, feetInchesToCm, kgToLb, lbToKg } from '../logic/units';
 import { activeTheme as loadedTheme, AppThemeName, colors, themeOptions } from '../theme';
 import { HealthConnectStatus } from '../services/healthConnect';
+import { deviceTimeZone, isSupportedTimeZone } from '../utils/dates';
+import { recommendDailyGoal } from '../logic/tdee';
 
-type Panel = 'profile' | 'appearance' | 'connections' | 'data' | 'security' | null;
+type Panel = 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, onOpenTab, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
+export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
   state: AppState; date: string; status: string; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
-  activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>; onOpenTab: (tab: TabKey) => void;
+  activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>;
   pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => string; onImport: (text: string) => void;
   onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
 }) {
@@ -37,8 +39,10 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
   const [mode, setMode] = useState<'lose' | 'maintain' | 'gain'>(profile?.goalMode === 'lose' || profile?.goalMode === 'gain' ? profile.goalMode : 'maintain');
   const [intensity, setIntensity] = useState<'gentle' | 'moderate' | 'aggressive'>(profile?.goalIntensity || 'moderate');
   const [targetDate, setTargetDate] = useState(profile?.targetDate || date);
+  const [timeZone, setTimeZone] = useState(profile?.timeZone || 'device');
   const [backupText, setBackupText] = useState('');
   const [showRestore, setShowRestore] = useState(false);
+  const [showGoalMethod, setShowGoalMethod] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
 
@@ -47,7 +51,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
     const imperial = cmToFeetInches(profile.heightCm);
     const preferredHeight = profile.preferredHeightUnit || 'cm';
     const preferredWeight = profile.preferredWeightUnit || 'kg';
-    setName(profile.displayName || ''); setSex(profile.sex); setAge(String(profile.ageYears)); setHeightUnit(preferredHeight); setHeight(String(profile.heightCm)); setFeet(String(imperial.feet)); setInches(String(imperial.inches)); setWeightUnit(preferredWeight); setWeight(String(preferredWeight === 'lb' ? kgToLb(profile.bodyWeightKg).toFixed(1) : profile.bodyWeightKg)); setTarget(String(preferredWeight === 'lb' && profile.targetWeightKg ? kgToLb(profile.targetWeightKg).toFixed(1) : profile.targetWeightKg || '')); setFactor(String(profile.activityFactor)); setMode(profile.goalMode === 'lose' || profile.goalMode === 'gain' ? profile.goalMode : 'maintain'); setIntensity(profile.goalIntensity || 'moderate'); setTargetDate(profile.targetDate || date);
+    setName(profile.displayName || ''); setSex(profile.sex); setAge(String(profile.ageYears)); setHeightUnit(preferredHeight); setHeight(String(profile.heightCm)); setFeet(String(imperial.feet)); setInches(String(imperial.inches)); setWeightUnit(preferredWeight); setWeight(String(preferredWeight === 'lb' ? kgToLb(profile.bodyWeightKg).toFixed(1) : profile.bodyWeightKg)); setTarget(String(preferredWeight === 'lb' && profile.targetWeightKg ? kgToLb(profile.targetWeightKg).toFixed(1) : profile.targetWeightKg || '')); setFactor(String(profile.activityFactor)); setMode(profile.goalMode === 'lose' || profile.goalMode === 'gain' ? profile.goalMode : 'maintain'); setIntensity(profile.goalIntensity || 'moderate'); setTargetDate(profile.targetDate || date); setTimeZone(profile.timeZone || 'device');
   }, [profile?.updatedAt, date]);
 
   const year = useMemo(() => {
@@ -68,10 +72,10 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
     const heightCm = heightUnit === 'cm' ? Number(height) : feetInchesToCm(Number(feet), Number(inches));
     const bodyWeightKg = weightUnit === 'kg' ? Number(weight) : lbToKg(Number(weight));
     const targetWeightKg = mode === 'maintain' ? bodyWeightKg : weightUnit === 'kg' ? Number(target) : lbToKg(Number(target));
-    const base = { displayName: name.trim() || undefined, profilePhotoUri: profile?.profilePhotoUri, sex, ageYears: Number(age), heightCm, bodyWeightKg, targetWeightKg, activityFactor: Number(factor), goalMode: mode, goalIntensity: intensity, targetDate, onboardingComplete: true, preferredHeightUnit: heightUnit, preferredWeightUnit: weightUnit, adaptiveTdee: profile?.adaptiveTdee, adaptiveTdeeUpdatedAt: profile?.adaptiveTdeeUpdatedAt, dietStyle: profile?.dietStyle, preferredCuisine: profile?.preferredCuisine, mealsPerDay: profile?.mealsPerDay, excludedFoods: profile?.excludedFoods };
+    const base = { displayName: name.trim() || undefined, profilePhotoUri: profile?.profilePhotoUri, sex, ageYears: Number(age), heightCm, bodyWeightKg, targetWeightKg, activityFactor: Number(factor), goalMode: mode, goalIntensity: intensity, targetDate, onboardingComplete: true, preferredHeightUnit: heightUnit, preferredWeightUnit: weightUnit, timeZone, adaptiveTdee: profile?.adaptiveTdee, adaptiveTdeeUpdatedAt: profile?.adaptiveTdeeUpdatedAt, dietStyle: profile?.dietStyle, preferredCuisine: profile?.preferredCuisine, mealsPerDay: profile?.mealsPerDay, excludedFoods: profile?.excludedFoods };
     if (![base.ageYears, base.heightCm, base.bodyWeightKg, base.targetWeightKg, base.activityFactor].every(Number.isFinite)) return null;
     return { ...base, weeklyWeightChangeKg: weeklyChangeForGoal(base) };
-  }, [name, sex, age, heightUnit, height, feet, inches, weightUnit, weight, target, factor, mode, intensity, targetDate, profile?.profilePhotoUri, profile?.adaptiveTdee, profile?.adaptiveTdeeUpdatedAt, profile?.dietStyle, profile?.preferredCuisine, profile?.mealsPerDay, profile?.excludedFoods]);
+  }, [name, sex, age, heightUnit, height, feet, inches, weightUnit, weight, target, factor, mode, intensity, targetDate, timeZone, profile?.profilePhotoUri, profile?.adaptiveTdee, profile?.adaptiveTdeeUpdatedAt, profile?.dietStyle, profile?.preferredCuisine, profile?.mealsPerDay, profile?.excludedFoods]);
 
   function switchHeight(next: 'cm' | 'ft') {
     if (next === heightUnit) return;
@@ -87,7 +91,15 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
 
   function save() {
     if (!input || input.ageYears < 13 || input.ageYears > 120 || input.heightCm < 80 || input.heightCm > 260 || input.bodyWeightKg < 25 || input.bodyWeightKg > 500 || input.activityFactor < 1.1 || input.activityFactor > 2.5) return Alert.alert('Check your profile', 'One or more values are invalid.');
+    if (!isSupportedTimeZone(timeZone)) return Alert.alert('Check time zone', 'Use a valid IANA time zone, such as Asia/Karachi, or choose Device time.');
     onSave(input); setPanel(null);
+  }
+
+  function saveTimeZone() {
+    if (!profile) return;
+    if (!isSupportedTimeZone(timeZone)) return Alert.alert('Check time zone', 'Use a valid IANA time zone, such as Asia/Karachi, or choose Device time.');
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = profile;
+    onSave({ ...input, timeZone }); setPanel(null);
   }
 
   async function choosePhoto() {
@@ -112,6 +124,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
   const goalLabel = profile?.goalMode === 'lose' ? 'Lose weight' : profile?.goalMode === 'gain' ? 'Build weight / muscle' : 'Maintain weight';
   const healthLabel = healthConnect?.permissionGranted ? 'Connected' : healthConnect?.developmentBuildRequired ? 'Needs APK build' : healthConnect?.available ? 'Ready to connect' : 'Checking phone';
   const voiceLabel = audioConfigured ? 'Ready' : audioConfigured === false ? 'Service needs attention' : 'Checking';
+  const currentGoal = profile ? recommendDailyGoal(profile, date) : undefined;
   const avatar = <Pressable onPress={() => void choosePhoto()} accessibilityRole="button" accessibilityLabel="Change profile photo" style={styles.avatarButton}>
     {profile?.profilePhotoUri ? <Image source={{ uri: profile.profilePhotoUri }} style={styles.avatarImage} /> : <View style={styles.avatarFallback}><Ionicons name="person" size={28} color={colors.white} /></View>}
     <View style={styles.camera}><Ionicons name="camera" size={12} color={colors.white} /></View>
@@ -125,8 +138,8 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
       <Card dark><View style={styles.identity}><View style={styles.identityCopy}><Text style={styles.identityName}>{profile?.displayName || 'Local profile'}</Text><Text style={styles.identityMeta}>{goalLabel} · {displayWeight(year.currentWeight)}</Text><Text style={styles.identitySub}>{profile?.targetWeightKg ? `Target ${displayWeight(profile.targetWeightKg)}` : 'Set a target in Profile & measurements'}</Text></View><Ionicons name="sparkles-outline" size={25} color={colors.goldSoft} /></View></Card>
       <SectionTitle title="At a glance" detail="your recorded progress" />
       <View style={styles.metricGrid}><Metric icon="calendar-outline" label="Logged days" value={String(year.loggedDays)} /><Metric icon="scale-outline" label="Weight change" value={year.weightChange == null ? '—' : `${year.weightChange > 0 ? '+' : ''}${profile?.preferredWeightUnit === 'lb' ? kgToLb(year.weightChange).toFixed(1) : year.weightChange.toFixed(1)} ${profile?.preferredWeightUnit === 'lb' ? 'lb' : 'kg'}`} /><Metric icon="flag-outline" label="Goal progress" value={year.goalProgress == null ? 'Steady' : `${year.goalProgress.toFixed(0)}%`} /></View>
-      <SettingsGroup title="Account"><SettingsRow icon="person-outline" title="Profile & measurements" detail="Name, body details, units, and goal pace" onPress={() => setPanel('profile')} /><SettingsRow icon="flag-outline" title="Goals & daily plan" detail="See your targets and recommended plan" onPress={() => onOpenTab('plans')} /><SettingsRow icon="stats-chart-outline" title="Progress & statistics" detail="Weight, intake, and activity trends" onPress={() => onOpenTab('trends')} last /></SettingsGroup>
-      <SettingsGroup title="Preferences"><SettingsRow icon="color-palette-outline" title="Appearance & display" detail={themeOptions.find((item) => item.key === activeTheme)?.label || 'Theme'} onPress={() => setPanel('appearance')} /><SettingsRow icon="shield-checkmark-outline" title="Local app lock" detail={pinEnabled ? 'PIN enabled' : 'No PIN set'} onPress={() => setPanel('security')} last /></SettingsGroup>
+      <SettingsGroup title="Account"><SettingsRow icon="person-outline" title="Profile & measurements" detail="Name, body details, units, and goal pace" onPress={() => setPanel('profile')} /><SettingsRow icon="flag-outline" title="Goals & daily plan" detail="Your target, adaptive check-ins, and how it works" onPress={() => setPanel('goals')} /><SettingsRow icon="stats-chart-outline" title="Progress & statistics" detail="A compact account summary of your own data" onPress={() => setPanel('statistics')} last /></SettingsGroup>
+      <SettingsGroup title="Preferences"><SettingsRow icon="time-outline" title="Date & time" detail={timeZone === 'device' ? `Device time · ${deviceTimeZone()}` : timeZone} onPress={() => setPanel('time')} /><SettingsRow icon="color-palette-outline" title="Appearance & display" detail={themeOptions.find((item) => item.key === activeTheme)?.label || 'Theme'} onPress={() => setPanel('appearance')} /><SettingsRow icon="shield-checkmark-outline" title="Local app lock" detail={pinEnabled ? 'PIN enabled' : 'No PIN set'} onPress={() => setPanel('security')} last /></SettingsGroup>
       <SettingsGroup title="Services"><SettingsRow icon="link-outline" title="Connections" detail={`Voice: ${voiceLabel} · Health: ${healthLabel}`} onPress={() => setPanel('connections')} last /></SettingsGroup>
       <SettingsGroup title="Your data"><SettingsRow icon="cloud-download-outline" title="Backup & restore" detail="Your diary stays on this device" onPress={() => setPanel('data')} last /></SettingsGroup>
       <Text style={styles.footer}>LOCAL-FIRST · SCHEMA 7</Text>
@@ -140,6 +153,12 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
       </Card>
       <Card><SectionTitle title="Goal preferences" detail="updates your plan" /><ChipRow><Chip label="Lose weight" selected={mode === 'lose'} onPress={() => setMode('lose')} /><Chip label="Maintain weight" selected={mode === 'maintain'} onPress={() => setMode('maintain')} /><Chip label="Build weight / muscle" selected={mode === 'gain'} onPress={() => setMode('gain')} /></ChipRow>{mode !== 'maintain' ? <Field label={`Target weight (${weightUnit})`} value={target} onChangeText={setTarget} keyboardType="decimal-pad" /> : null}<CalendarPicker label="TARGET DATE" value={targetDate} minDate={date} onChange={setTargetDate} /><Text style={styles.label}>PACE</Text><ChipRow>{(['gentle', 'moderate', 'aggressive'] as const).map((value) => <Chip key={value} label={value} selected={intensity === value} onPress={() => setIntensity(value)} />)}</ChipRow><Field label="Typical activity factor" value={factor} onChangeText={setFactor} keyboardType="decimal-pad" /><Button label="Save profile and goals" onPress={save} /></Card>
     </> : null}
+
+    {panel === 'goals' ? <><SectionTitle title="Goals & daily plan" detail="your own settings" /><Card dark><Text style={styles.goalKicker}>{goalLabel.toUpperCase()}</Text><Text style={styles.goalHero}>{displayWeight(profile?.bodyWeightKg)} → {displayWeight(profile?.targetWeightKg)}</Text><Text style={styles.goalDetail}>{profile?.targetDate ? `Target ${profile.targetDate}` : 'No target date'} · {profile?.weeklyWeightChangeKg || 0} kg/week</Text></Card><View style={styles.metricGrid}><Metric icon="flame-outline" label="Daily calories" value={currentGoal ? String(currentGoal.calories) : '—'} /><Metric icon="barbell-outline" label="Protein" value={currentGoal ? `${currentGoal.protein} g` : '—'} /><Metric icon="pulse-outline" label="Maintenance" value={profile?.adaptiveTdee ? `${profile.adaptiveTdee} kcal` : 'Starting estimate'} /></View><Card><Text style={styles.rowTitle}>Adaptive plan</Text><Text style={styles.systemDetail}>{profile?.adaptiveTdee ? `Active: maintenance was last checked on ${profile.adaptiveTdeeUpdatedAt?.slice(0, 10) || 'a previous date'}.` : 'Collecting your first two weeks of food and weigh-ins.'}</Text><Pressable onPress={() => setShowGoalMethod(!showGoalMethod)} style={styles.explainToggle}><Text style={styles.explainToggleText}>{showGoalMethod ? 'Hide calculation details' : 'How the plan updates'}</Text><Ionicons name={showGoalMethod ? 'chevron-up' : 'chevron-down'} size={16} color={colors.pine} /></Pressable>{showGoalMethod ? <Text style={styles.systemDetail}>After at least 14 days, 10 logged food days, and weigh-ins across the period, the app estimates your maintenance from your recorded intake and weight trend. It checks no more than weekly and changes maintenance by at most 100 kcal/day each time. Missing logs never lower your target.</Text> : null}<Button label="Edit goals and profile" tone="secondary" onPress={() => setPanel('profile')} /></Card></> : null}
+
+    {panel === 'statistics' ? <><SectionTitle title="Progress & statistics" detail="account summary" /><View style={styles.metricGrid}><Metric icon="calendar-outline" label="Logged days" value={String(year.loggedDays)} /><Metric icon="scale-outline" label="Current weight" value={displayWeight(year.currentWeight)} /><Metric icon="trending-up-outline" label="Weight change" value={year.weightChange == null ? '—' : `${year.weightChange > 0 ? '+' : ''}${year.weightChange.toFixed(1)} kg`} /></View><Card><Text style={styles.rowTitle}>More detail lives in Trends</Text><Text style={styles.systemDetail}>The Trends tab is kept separate so account settings never jump into the main navigation. It contains your day-by-day food, weight, and activity charts.</Text></Card></> : null}
+
+    {panel === 'time' ? <><SectionTitle title="Date & time" detail="used for new diary items" /><Card><Text style={styles.explainer}>Device time is the normal choice. It fixes the old UTC date shift and works wherever the phone travels.</Text><ChipRow><Chip label={`Device (${deviceTimeZone()})`} selected={timeZone === 'device'} onPress={() => setTimeZone('device')} /><Chip label="Pakistan · UTC+5" selected={timeZone === 'Asia/Karachi'} onPress={() => setTimeZone('Asia/Karachi')} /></ChipRow><Field label="Other IANA time zone (optional)" value={timeZone === 'device' || timeZone === 'Asia/Karachi' ? '' : timeZone} onChangeText={(value) => setTimeZone(value.trim() || 'device')} placeholder="Example: Europe/London" autoCapitalize="none" /><Button label="Save date & time" onPress={saveTimeZone} /></Card></> : null}
 
     {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Changing a theme reloads the app once so every screen updates together.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>FitnessMacro follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
 
@@ -159,6 +178,7 @@ function Metric({ icon, label, value }: { icon: React.ComponentProps<typeof Ioni
 const styles = StyleSheet.create({
   avatarButton: { width: 56, height: 56, borderRadius: 28, position: 'relative' }, avatarImage: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.paperDeep }, avatarFallback: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.pine, alignItems: 'center', justifyContent: 'center' }, camera: { width: 21, height: 21, borderRadius: 11, backgroundColor: colors.coral, borderWidth: 2, borderColor: colors.paper, alignItems: 'center', justifyContent: 'center', position: 'absolute', right: -2, bottom: -1 },
   back: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 1, marginBottom: 8, paddingVertical: 4 }, backText: { color: colors.pine, fontSize: 12, fontWeight: '900' }, identity: { flexDirection: 'row', alignItems: 'center', gap: 12 }, identityCopy: { flex: 1 }, identityName: { color: colors.white, fontFamily: 'serif', fontSize: 24, fontWeight: '900' }, identityMeta: { color: colors.goldSoft, fontSize: 12, fontWeight: '800', marginTop: 4 }, identitySub: { color: colors.faint, fontSize: 10, marginTop: 5 },
+  goalKicker: { color: '#A6D9C9', fontSize: 9, fontWeight: '900', letterSpacing: 1.4 }, goalHero: { color: colors.white, fontFamily: 'serif', fontSize: 25, fontWeight: '900', marginTop: 5 }, goalDetail: { color: '#BDD0C6', fontSize: 10, marginTop: 5 }, explainToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.paper, borderRadius: 12, padding: 11, marginBottom: 10 }, explainToggleText: { color: colors.pine, fontSize: 10, fontWeight: '900' },
   metricGrid: { flexDirection: 'row', gap: 8, marginBottom: 5 }, metric: { flex: 1, minHeight: 98, padding: 11, marginBottom: 0 }, metricValue: { color: colors.ink, fontSize: 16, fontWeight: '900', marginTop: 9 }, metricLabel: { color: colors.muted, fontSize: 9, lineHeight: 12, marginTop: 3 },
   settingsCard: { paddingVertical: 0, overflow: 'hidden' }, settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 67, paddingHorizontal: 13, paddingVertical: 9 }, settingsRowBorder: { borderBottomWidth: 1, borderColor: colors.line }, pressed: { opacity: 0.62 }, rowIcon: { width: 33, height: 33, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.pineSoft }, rowCopy: { flex: 1 }, rowTitle: { color: colors.ink, fontSize: 12, fontWeight: '900' }, rowDetail: { color: colors.muted, fontSize: 9.5, lineHeight: 14, marginTop: 2 }, footer: { color: colors.faint, fontSize: 9, letterSpacing: 1.2, fontWeight: '800', textAlign: 'center', marginTop: 7 },
   label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 7 }, columns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }, explainer: { color: colors.muted, fontSize: 11, lineHeight: 17, marginBottom: 12 }, systemDetail: { color: colors.muted, fontSize: 10.5, lineHeight: 16, marginTop: 4, marginBottom: 10 }, ready: { color: colors.pine, fontSize: 11, fontWeight: '800', marginBottom: 12 },

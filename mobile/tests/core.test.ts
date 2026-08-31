@@ -11,6 +11,7 @@ import { estimateActivityCalories } from '../src/logic/activityEnergy';
 import { mealForTime } from '../src/logic/time';
 import { calculateRecipe } from '../src/logic/recipes';
 import { estimateAdaptiveExpenditure } from '../src/logic/expenditure';
+import { dateFor, startOfWeekMonday } from '../src/utils/dates';
 import { EMPTY_STATE, upsertWeight } from '../src/storage/localDb';
 import { BodyMetricLog, FoodEntry, FoodItem, UserProfile } from '../src/types';
 
@@ -137,6 +138,12 @@ test('time categories and activity energy are inferred without user calorie inpu
   assert.equal(mealForTime('13:15'), 'lunch');
   assert.equal(mealForTime('20:00'), 'dinner');
   assert.equal(estimateActivityCalories('Walk', 30, 92.8).calories, 171);
+});
+
+test('diary dates use the chosen local calendar and Monday-starting weeks', () => {
+  assert.equal(dateFor(new Date('2026-08-30T20:15:00.000Z'), 'Asia/Karachi'), '2026-08-31');
+  assert.equal(startOfWeekMonday('2026-08-30'), '2026-08-24');
+  assert.equal(startOfWeekMonday('2026-08-31'), '2026-08-31');
 });
 
 test('recipe nutrition accounts for ingredient mass and final cooked weight', () => {

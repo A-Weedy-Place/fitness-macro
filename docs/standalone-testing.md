@@ -17,6 +17,16 @@
 7. In **You → Connections**, confirm Voice assistant and Food agent show ready without a PC-link form. Health Connect can be connected separately.
 8. In **You → Backup & restore**, share a backup, then verify no raw audio or credentials appear in it.
 
+## APK feedback regression pass
+
+1. In **Today**, check that all seven visible days run Monday through Sunday. Press an arrow: the entire strip must move exactly one week. Press the week label to return to today.
+2. Log a boiled egg. Tap its diary row, change the date, time, amount, and note, then save. The item must move to the selected day/time without changing the reusable egg reference.
+3. In **Food**, search `boiled egg` and `whole wheat roti` with internet available and then after temporarily disabling data. Saved/reference matches and **Custom food** / **Build a dish** must remain usable either way.
+4. In **You → Goals & daily plan**, open **How the plan updates**. Verify the normal view is compact and that it says it needs 10 food-log days plus a 14-day weight span before a bounded weekly automatic adjustment.
+5. In **You → Date & time**, leave **Device time** selected (or choose Pakistan UTC+5), then log food around local midnight. It must use the visible local calendar day.
+6. In **You → Appearance**, select another palette. The app may restart once, then must reopen in the selected palette.
+7. In **You → Connections → Connect Health**, the Android Health Connect permission screen or a clear result dialog must appear. If it says Health Connect is unavailable, first confirm the phone supports it, it is installed/up to date, and the phone has a screen lock.
+
 ## Free-service behavior
 
 The app uses the Groq Free plan. If the AI is temporarily rate-limited, local logging, cookbook edits, trends, and backup remain usable. Wait for the displayed retry period before sending another AI request.

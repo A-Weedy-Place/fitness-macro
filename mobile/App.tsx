@@ -3,6 +3,7 @@ import { Alert, AppState as NativeAppState, DevSettings, LayoutAnimation, Status
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SecureStore from 'expo-secure-store';
+import * as Updates from 'expo-updates';
 import {
   ActivityEntry,
   AgentResolution,
@@ -39,9 +40,9 @@ import {
   upsertWeight
 } from './src/storage/localDb';
 import { agentStatus, audioStatus, getGoalRecommendation, GoalReviewResponse, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, searchFoods as searchHostedFoods, transcribeRecording } from './src/services/agentClient';
-import { recommendDailyGoal } from './src/logic/tdee';
+import { estimateTdee, mifflinStJeor, recommendDailyGoal } from './src/logic/tdee';
 import { buildPlanFromDay, instantiatePlan } from './src/logic/plans';
-import { shiftDate, today } from './src/utils/dates';
+import { dateDistance, dateFor, shiftDate, today } from './src/utils/dates';
 import { BottomTabs, TabKey } from './src/components/ui';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { PlansScreen } from './src/screens/PlansScreen';
@@ -59,6 +60,8 @@ import { calculateRecipe } from './src/logic/recipes';
 import { currentTime, mealForTime } from './src/logic/time';
 import { estimateActivityCalories } from './src/logic/activityEnergy';
 import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect } from './src/services/healthConnect';
+import { buildDailySeries } from './src/logic/analytics';
+import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -97,6 +100,7 @@ function FitnessApp() {
   useEffect(() => {
     void loadState().then((loaded) => {
       setState(loaded);
+      setDate(today(loaded.profile?.timeZone));
       setHydrated(true);
     });
   }, []);
@@ -130,6 +134,24 @@ function FitnessApp() {
     });
     return () => subscription.remove();
   }, [hydrated, pinEnabled]);
+
+  useEffect(() => {
+    if (!hydrated || !state.profile) return;
+    const profile = state.profile;
+    const baseline = estimateTdee(mifflinStJeor(profile), profile.activityFactor);
+    const endDate = today(profile.timeZone);
+    const series = buildDailySeries({ endDate, days: 28, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
+    const adaptive = estimateAdaptiveExpenditure(series, state.weights, baseline);
+    if (adaptive.status !== 'updating' || adaptive.confidence < 0.45) return;
+    const current = profile.adaptiveTdee || baseline;
+    const lastDate = profile.adaptiveTdeeUpdatedAt ? dateFor(new Date(profile.adaptiveTdeeUpdatedAt), profile.timeZone) : undefined;
+    if (lastDate && dateDistance(lastDate, endDate) < 7) return;
+    const next = Math.round(Math.max(current - 100, Math.min(current + 100, adaptive.estimate)));
+    if (Math.abs(next - current) < 50) return;
+    const updated = { ...profile, adaptiveTdee: next, adaptiveTdeeUpdatedAt: now(), updatedAt: now() };
+    setState((currentState) => currentState.profile?.updatedAt === profile.updatedAt ? setProfile(currentState, updated) : currentState);
+    setStatus(`Your plan checked 14+ days of food and weight data and adjusted maintenance by ${next - current > 0 ? '+' : ''}${next - current} kcal/day. The daily target now follows it.`);
+  }, [hydrated, state.profile, state.entries, state.weights, state.foods, state.activities, state.goals]);
 
   function changeTab(tab: TabKey) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -184,23 +206,26 @@ function FitnessApp() {
   }
 
   async function searchFoods(query: string) {
-    const local = state.foods.filter((food) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(query.toLowerCase()));
+    const normalized = query.toLowerCase().trim();
+    const words = normalized.split(/\s+/).filter(Boolean);
+    const score = (food: FoodItem) => {
+      const name = `${food.name} ${food.brand || ''}`.toLowerCase();
+      const matchedWords = words.filter((word) => name.includes(word)).length;
+      const relevance = name === normalized ? 100 : name.startsWith(normalized) ? 80 : name.includes(normalized) ? 60 : matchedWords * 12;
+      const source = food.tags?.includes('recipe') || food.tags?.includes('custom-dish') ? 10000 : food.source.source === 'manual' ? 5000 : food.tags?.includes('starter') ? 25 : food.source.source === 'local' ? 20 : food.source.source === 'usda' ? 10 : 0;
+      return relevance + source;
+    };
+    const local = state.foods.filter((food) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(normalized) || words.length > 0 && words.every((word) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(word))).sort((a, b) => score(b) - score(a));
     try {
       const result = await searchHostedFoods(query, 8);
       setState((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
       const combined = [...local, ...result.items];
       const unique = combined.filter((food, index) => combined.findIndex((candidate) => candidate.id === food.id) === index);
-      const normalized = query.toLowerCase().trim();
-      const score = (food: FoodItem) => {
-        const name = food.name.toLowerCase();
-        const relevance = name === normalized ? 100 : name.startsWith(normalized) ? 80 : name.includes(normalized) ? 60 : normalized.split(/\s+/).filter((token) => name.includes(token)).length * 10;
-        const source = food.tags?.includes('recipe') || food.tags?.includes('custom-dish') ? 10000 : food.source.source === 'manual' ? 5000 : food.tags?.includes('starter') ? 25 : food.source.source === 'local' ? 20 : food.source.source === 'usda' ? 10 : 0;
-        return relevance + source;
-      };
       return unique.sort((a, b) => score(b) - score(a));
-    } catch (error) {
-      if (local.length) return local;
-      throw error;
+    } catch {
+      // Manual local search stays available even when the optional catalogue
+      // lookup is offline, rate-limited, or returns no compatible result.
+      return local;
     }
   }
 
@@ -210,7 +235,7 @@ function FitnessApp() {
     return response.item;
   }
 
-  async function resolveFoods(phrase: string, defaultTime = currentTime()): Promise<AgentResolution> {
+  async function resolveFoods(phrase: string, defaultTime = currentTime(state.profile?.timeZone)): Promise<AgentResolution> {
     const response = await resolveTranscript(phrase, date, defaultTime, assistantContext());
     setState((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
     return {
@@ -258,7 +283,13 @@ function FitnessApp() {
   function changeTheme(theme: AppThemeName) {
     if (theme === activeTheme) return;
     saveAppTheme(theme);
-    setTimeout(() => DevSettings.reload(), 80);
+    if (Updates.isEnabled) {
+      void Updates.reloadAsync().catch(() => Alert.alert('Restart needed', 'Close and reopen the app once to apply the selected theme.'));
+    } else if (__DEV__) {
+      setTimeout(() => DevSettings.reload(), 80);
+    } else {
+      Alert.alert('Theme saved', 'Close and reopen the app once to apply the selected theme.');
+    }
   }
 
   async function transcribeFood(uri: string) {
@@ -278,14 +309,17 @@ function FitnessApp() {
         return !existing || existing.notes === 'Imported from Health Connect' ? upsertWeight(next, weight) : next;
       }, withActivities);
     });
-    if (requestAccess) setStatus(result.status.message);
+    if (requestAccess) {
+      setStatus(result.status.message);
+      Alert.alert('Health Connect', result.status.message);
+    }
   }
 
   function assistantContext() {
     const names = new Map(state.foods.map((food) => [food.id, food.name]));
     return {
       currentDate: date,
-      currentTime: currentTime(),
+      currentTime: currentTime(state.profile?.timeZone),
       profile: state.profile,
       goals: state.goals.slice(-30),
       entries: state.entries.slice(-500).map((entry) => ({ id: entry.id, date: entry.date, time: entry.eatenAt, mealType: entry.mealType, foodId: entry.foodId, foodName: names.get(entry.foodId), quantity: entry.portion.quantity, unit: entry.portion.unit })),
@@ -337,7 +371,7 @@ function FitnessApp() {
         appliedChanges += 1;
       };
       for (const action of assistantPlan.actions) {
-        const actionDate = action.date || date; const actionTime = action.time || currentTime();
+        const actionDate = action.date || date; const actionTime = action.time || currentTime(next.profile?.timeZone);
         if (action.type === 'save_food') action.ingredients.forEach(foodFor);
         else if (action.type === 'log_foods') action.ingredients.forEach((ingredient) => { const food = foodFor(ingredient); addEntry(food, ingredient.quantity, actionDate, actionTime, 'Logged by the AI assistant.'); });
         else if (action.type === 'create_recipe' || action.type === 'create_recipe_and_log') {
@@ -366,7 +400,7 @@ function FitnessApp() {
         else if (action.type === 'set_goal' && action.calories != null && action.protein != null && action.carbs != null && action.fat != null) {
           const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); appliedChanges += 1;
         } else if (action.type === 'update_profile' && next.profile) {
-          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, profilePhotoUri: current.profilePhotoUri, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
+          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, profilePhotoUri: current.profilePhotoUri, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, timeZone: current.timeZone, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
           next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'create_plan_from_day' && action.name) {
           const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); appliedChanges += 1;
@@ -391,6 +425,7 @@ function FitnessApp() {
     const profile: UserProfile = { ...state.profile, ...input, id: state.profile?.id || makeId('profile'), createdAt: state.profile?.createdAt || timestamp, updatedAt: timestamp };
     const goal = recommendDailyGoal(profile, date);
     await commit(upsertGoal(setProfile(state, profile), goal), `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
+    if (input.timeZone !== state.profile?.timeZone) setDate(today(input.timeZone));
     await personalizeProgram(profile);
   }
 
@@ -469,10 +504,10 @@ function FitnessApp() {
     }
   }
 
-  async function applyAdaptiveTdee(value: number) {
-    if (!state.profile) return;
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = state.profile;
-    await saveProfileInput({ ...input, adaptiveTdee: value, adaptiveTdeeUpdatedAt: now() });
+  async function updateEntry(entry: FoodEntry) {
+    const eatenAt = entry.eatenAt || '12:00';
+    const updated = { ...entry, eatenAt, mealType: mealForTime(eatenAt) };
+    await commit(upsertEntry(state, updated), `Updated ${state.foods.find((food) => food.id === entry.foodId)?.name || 'food'} in your diary`);
   }
 
   async function createPlan(name: string, description?: string) {
@@ -547,7 +582,7 @@ function FitnessApp() {
   }
 
   function changeDate(offset: number | 'today') {
-    setDate(offset === 'today' ? today() : shiftDate(date, offset));
+    setDate(offset === 'today' ? today(state.profile?.timeZone) : shiftDate(date, offset));
   }
 
   function openLibrary(time?: string) {
@@ -565,12 +600,12 @@ function FitnessApp() {
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
 
   let screen: React.ReactNode;
-  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} />;
-  else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} review={goalReview} onReview={() => void reviewCurrentGoal()} onApplyAdaptive={(value) => void applyAdaptiveTdee(value)} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
+  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} timeZone={state.profile?.timeZone} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onUpdateEntry={updateEntry} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} />;
+  else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} review={goalReview} onReview={() => void reviewCurrentGoal()} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
-  else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

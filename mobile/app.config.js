@@ -65,7 +65,14 @@ export default {
     },
     android: {
       package: 'com.ashar.fitnessmacro',
-      permissions: []
+      // These are declared in the Android manifest so the Health Connect
+      // permission screen can appear in a standalone APK. The app requests
+      // only these three read scopes at runtime.
+      permissions: [
+        'android.permission.health.READ_WEIGHT',
+        'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
+        'android.permission.health.READ_TOTAL_CALORIES_BURNED'
+      ]
     }
   }
 };

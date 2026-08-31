@@ -45,6 +45,17 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Android clear-text traffic is disabled because AI/reference requests use HTTPS.
 - Validation: Worker TypeScript passes; mobile TypeScript and 12 mobile tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call received Groq’s expected free-tier `429`, confirming that this personal free tier should not be burst-tested.
 
+## APK feedback correction stage — 2026-08-31
+
+- The owner tested the first standalone APK on a physical phone. The direct Groq relay is working (typed AI responds), but the release exposed several real product issues; this stage corrects the behavior rather than treating Expo Go as final proof.
+- **Calendar and clock:** diary dates now default to the phone’s local calendar instead of UTC; a selectable IANA time-zone override lives in **You → Date & time**. Today shows one full Monday–Sunday week, and its arrows move by whole weeks.
+- **Manual-first food logging:** a successful or failed online catalogue lookup never blocks the on-device cookbook/reference search. Every logged row now opens an individual editor for its amount, unit, note, date, and time; editing a log never changes the reusable food/recipe. The manual Custom food and Build a dish paths are visible beside search.
+- **Adaptive goals:** after 14 calendar days, at least 10 logged food days, and weigh-ins across the period, a local observed-maintenance estimate can update automatically at most once a week, with a maximum 100 kcal/day step. Missing logs never lower a target. The detailed calculation is collapsible; the normal Goals view is concise.
+- **Account separation:** Goals & daily plan and Progress & statistics in **You** are account panels, not shortcuts into bottom-tab screens. The main Goals and Trends tabs remain separate product views.
+- **Themes:** release builds use `expo-updates` to restart safely after a palette selection; the former development-only reload path was the reason appearance choices appeared to do nothing in the APK.
+- **Health Connect:** the Android manifest now declares only `READ_WEIGHT`, `READ_ACTIVE_CALORIES_BURNED`, and `READ_TOTAL_CALORIES_BURNED`; the app requests them at runtime, no longer filters records to Strava, and shows the connection result in a dialog. It still requires Android Health Connect support and a device screen lock. It is free and never uses an API key.
+- Deleted the obsolete ignored mobile `.env` that contained a previous PC address/pairing token. No mobile runtime reads any PC URL or pairing variable.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this section synchronized with `obsidian/Fitness App Project Context.md` whenever the user makes a material product decision or a feature is completed.
@@ -55,8 +66,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Optional login for the current local-first product is a device-only 4–8 digit PIN, stored in encrypted Expo SecureStore. It locks on backgrounding and has no subscription, server, email identity, password recovery, or cross-device account semantics. A real email/Google account must be designed with an authenticated backend later; do not imply that this PIN is one.
 - Appearance now offers Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. Brightness intentionally follows the phone's own system controls.
 - Added native Expo dependencies/config for Android navigation-bar control, profile photo picking, and encrypted local PIN storage. These native additions need a rebuilt APK for full realistic testing, though most layout work can still be inspected in Expo Go.
-- The phone now has a **You → Connections → PC agent link** form. It stores the PC URL in local app storage and the pairing token in encrypted SecureStore, so an installable APK does not bake in Wi-Fi details or need rebuilding after a router/IP change. On 2026-08-31 the active PC Wi-Fi address is `http://192.168.18.113:8787`; this is transient and must be changed in the phone form when the network changes.
-- The hidden background PC agent was restarted and verified over that LAN address. It reports Groq GPT-OSS planning enabled, Groq configured, paid tools disabled, and 7,756 local ingredients indexed.
+- There is no PC link, saved Wi-Fi address, pairing token, or desktop agent in the shipped mobile path. The preview APK reaches only the private HTTPS relay.
 - Validation after this UI checkpoint: mobile TypeScript check + 12 tests pass; agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30

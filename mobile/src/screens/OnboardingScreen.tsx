@@ -22,7 +22,7 @@ export function OnboardingScreen({ date, onComplete }: { date: string; onComplet
     const heightCm = heightUnit === 'cm' ? Number(height) : feetInchesToCm(Number(feet), Number(inches));
     const bodyWeightKg = weightUnit === 'kg' ? Number(weight) : lbToKg(Number(weight));
     const targetWeightKg = mode === 'maintain' ? bodyWeightKg : weightUnit === 'kg' ? Number(target) : lbToKg(Number(target));
-    const base = { displayName: name.trim() || undefined, sex, ageYears: Number(age), heightCm, bodyWeightKg, targetWeightKg, activityFactor: activity, goalMode: mode, goalIntensity: intensity, targetDate, onboardingComplete: true, preferredHeightUnit: heightUnit, preferredWeightUnit: weightUnit, dietStyle, preferredCuisine: cuisine, mealsPerDay, excludedFoods: excludedFoods.trim() || undefined };
+    const base = { displayName: name.trim() || undefined, sex, ageYears: Number(age), heightCm, bodyWeightKg, targetWeightKg, activityFactor: activity, goalMode: mode, goalIntensity: intensity, targetDate, onboardingComplete: true, preferredHeightUnit: heightUnit, preferredWeightUnit: weightUnit, timeZone: 'device', dietStyle, preferredCuisine: cuisine, mealsPerDay, excludedFoods: excludedFoods.trim() || undefined };
     const input: ProfileInput = { ...base, weeklyWeightChangeKg: weeklyChangeForGoal(base) };
     if (![input.ageYears, input.heightCm, input.bodyWeightKg, input.targetWeightKg].every(Number.isFinite)) return null;
     const profile = { ...input, id: 'preview', createdAt: '', updatedAt: '' }; const bmr = mifflinStJeor(profile);

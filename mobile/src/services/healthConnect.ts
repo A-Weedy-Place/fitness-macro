@@ -37,7 +37,9 @@ export async function syncHealthConnect(requestAccess = false, days = 30): Promi
     if (!permissionGranted) return { status: { available: true, permissionGranted: false, developmentBuildRequired: false, message: 'Permission is needed once to read weight and exercise-calorie records.' }, activities: [], weights: [] };
     const end = new Date();
     const start = new Date(end.getTime() - days * 86400000);
-    const options = { timeRangeFilter: { operator: 'between' as const, startTime: start.toISOString(), endTime: end.toISOString() }, dataOriginFilter: ['com.strava'] };
+    // Health Connect is the source selector. Restricting this to the Strava
+    // package made a successful connection look empty for every other tracker.
+    const options = { timeRangeFilter: { operator: 'between' as const, startTime: start.toISOString(), endTime: end.toISOString() } };
     let records: Array<Record<string, any>> = [];
     if (has('ActiveCaloriesBurned') || has('TotalCaloriesBurned')) {
       let response = has('ActiveCaloriesBurned') ? await health.readRecords('ActiveCaloriesBurned', options) : undefined;
@@ -55,7 +57,7 @@ export async function syncHealthConnect(requestAccess = false, days = 30): Promi
         id: `health_strava_${id}`,
         date: localDate(startTime),
         name: 'Health Connect activity',
-        source: 'strava' as const,
+        source: 'health_connect' as const,
         type: 'health_connect',
         durationMinutes: Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)),
         caloriesEstimated: Math.max(0, Number(record.energy?.inKilocalories || 0)),

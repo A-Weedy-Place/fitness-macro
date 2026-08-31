@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppState, MealPlan } from '../types';
 import { GoalReviewResponse } from '../services/agentClient';
 import { Button, Card, EmptyState, Field, MetricTile, Page, ScreenHeader, SectionTitle } from '../components/ui';
@@ -11,12 +11,11 @@ import { colors } from '../theme';
 import { buildDailySeries } from '../logic/analytics';
 import { estimateAdaptiveExpenditure } from '../logic/expenditure';
 
-export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, onEditProfile, onCreate, onApply, onDelete }: {
+export function PlansScreen({ state, date, review, onReview, onEditProfile, onCreate, onApply, onDelete }: {
   state: AppState;
   date: string;
   review: GoalReviewResponse | null;
   onReview: () => void;
-  onApplyAdaptive: (value: number) => void;
   onEditProfile: () => void;
   onCreate: (name: string, description?: string) => void;
   onApply: (plan: MealPlan) => void;
@@ -24,6 +23,7 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
 }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [showMethod, setShowMethod] = useState(false);
   const dayEntries = state.entries.filter((entry) => entry.date === date);
   const profile = state.profile;
   const goal = goalForDate(state.goals, profile, date);
@@ -42,11 +42,11 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
   }
 
   return <Page>
-    <ScreenHeader eyebrow="Your direction" title="Goal plan" subtitle="A transparent body goal first, reusable food templates second. AI can explain the plan but cannot bypass the safety limits." />
+    <ScreenHeader eyebrow="Your direction" title="Goal plan" subtitle="Your daily target adapts from your real food and weigh-ins." />
     <Card dark>
       <Text style={styles.heroKicker}>{goalLabel(profile).toUpperCase()}</Text>
       <Text style={styles.heroTitle}>{profile?.bodyWeightKg.toFixed(1)} kg → {profile?.targetWeightKg?.toFixed(1) || profile?.bodyWeightKg.toFixed(1)} kg</Text>
-      <Text style={styles.heroDetail}>{profile?.targetDate ? `Target date ${profile.targetDate}` : 'No deadline'} · {profile?.goalIntensity || 'moderate'} pace · {weekly > 0 ? '+' : ''}{weekly.toFixed(2)} kg/week</Text>
+      <Text style={styles.heroDetail}>{profile?.targetDate ? `Target ${profile.targetDate}` : 'No deadline'} · {profile?.goalIntensity || 'moderate'} pace · {weekly > 0 ? '+' : ''}{weekly.toFixed(2)} kg/week</Text>
       <View style={styles.heroActions}><Button label="Edit goal" compact tone="secondary" onPress={onEditProfile} /><Button label="Refresh personalized plan" compact onPress={onReview} /></View>
     </Card>
 
@@ -58,26 +58,24 @@ export function PlansScreen({ state, date, review, onReview, onApplyAdaptive, on
     </View>
 
     <Card>
-      <SectionTitle title="Plan reasoning" detail="calculated locally" />
-      <View style={styles.formula}><Text style={styles.formulaValue}>{tdee}</Text><Text style={styles.formulaLabel}>maintenance</Text><Text style={styles.formulaOperator}>{(goal?.calories || tdee) < tdee ? '−' : '+'}</Text><Text style={styles.formulaValue}>{Math.abs((goal?.calories || tdee) - tdee)}</Text><Text style={styles.formulaLabel}>adjustment</Text><Text style={styles.formulaOperator}>=</Text><Text style={styles.formulaValue}>{goal?.calories || '—'}</Text><Text style={styles.formulaLabel}>daily target</Text></View>
-      <Text style={styles.reviewSummary}>{program?.summary || 'Your target uses Mifflin-St Jeor, your selected activity level, and a bounded weekly rate. Refresh the plan for a culturally relevant sample day.'}</Text>
-      {program?.actions.map((action) => <Text key={action} style={styles.reviewItem}>• {action}</Text>)}
-      {program?.cautions.map((caution) => <Text key={caution} style={styles.caution}>Check: {caution}</Text>)}
+      <SectionTitle title="Today’s target" detail="calculated locally" />
+      <Text style={styles.reviewSummary}>{program?.summary || 'Your target uses your starting measurements, selected pace, and safe limits.'}</Text>
+      <Pressable style={styles.explainToggle} onPress={() => setShowMethod(!showMethod)}><Text style={styles.explainToggleText}>{showMethod ? 'Hide calculation details' : 'How this plan is calculated'}</Text><Text style={styles.explainArrow}>{showMethod ? '⌃' : '⌄'}</Text></Pressable>
+      {showMethod ? <><View style={styles.formula}><Text style={styles.formulaValue}>{tdee}</Text><Text style={styles.formulaLabel}>maintenance</Text><Text style={styles.formulaOperator}>{(goal?.calories || tdee) < tdee ? '−' : '+'}</Text><Text style={styles.formulaValue}>{Math.abs((goal?.calories || tdee) - tdee)}</Text><Text style={styles.formulaLabel}>adjustment</Text><Text style={styles.formulaOperator}>=</Text><Text style={styles.formulaValue}>{goal?.calories || '—'}</Text><Text style={styles.formulaLabel}>daily target</Text></View>{program?.actions.map((action) => <Text key={action} style={styles.reviewItem}>• {action}</Text>)}{program?.cautions.map((caution) => <Text key={caution} style={styles.caution}>Check: {caution}</Text>)}</> : null}
     </Card>
 
     {program?.meals?.length ? <Card>
       <SectionTitle title="Flexible example day" detail={program.aiGenerated ? 'Groq-personalized · targets locked locally' : 'local fallback'} />
-      <Text style={styles.reviewSummary}>These are suggestions, not mandatory foods. The meal targets add back to your daily calorie and protein goals.</Text>
+      <Text style={styles.reviewSummary}>A flexible example, not a rule. Swap foods manually or use it as inspiration.</Text>
       {program.meals.map((meal) => <View key={`${meal.time}_${meal.label}`} style={styles.mealRow}><View style={styles.mealHeading}><Text style={styles.mealName}>{meal.time} · {meal.label}</Text><Text style={styles.mealTarget}>{meal.targetCalories} kcal · {meal.targetProtein}g protein</Text></View>{meal.foods.map((food) => <Text key={food} style={styles.item}>• {food}</Text>)}</View>)}
       <Text style={styles.sourceHeading}>GUIDANCE SOURCES</Text>
       {program.sources.map((source) => <Text key={source.url} style={styles.source}>• {source.title}</Text>)}
     </Card> : null}
 
     <Card>
-      <SectionTitle title="Trend-based expenditure" detail={adaptive.status === 'updating' ? `${(adaptive.confidence * 100).toFixed(0)}% confidence` : 'collecting data'} />
-      <Text style={styles.reviewSummary}>{adaptive.status === 'updating' ? `Your last ${adaptive.weightSpanDays} days of weight direction and ${adaptive.loggedDays} logged days suggest about ${adaptive.estimate} kcal/day expenditure. This is more useful for future target updates than adding individual exercise calories.` : `Log food on at least 7 days and weigh in across at least 7 days. Until then, the ${baselineTdee} kcal profile estimate remains active.`}</Text>
-      {adaptive.status === 'updating' && adaptive.estimate !== profile?.adaptiveTdee ? <Button label={`Use ${adaptive.estimate} kcal expenditure`} tone="secondary" onPress={() => onApplyAdaptive(adaptive.estimate)} /> : null}
-      {profile?.adaptiveTdee ? <Text style={styles.caution}>Current adaptive expenditure: {profile.adaptiveTdee} kcal, last accepted {profile.adaptiveTdeeUpdatedAt?.slice(0, 10) || 'previously'}.</Text> : null}
+      <SectionTitle title="Adaptive check-in" detail={adaptive.status === 'updating' ? `${(adaptive.confidence * 100).toFixed(0)}% confidence` : 'collecting data'} />
+      <Text style={styles.reviewSummary}>{adaptive.status === 'updating' ? `Based on ${adaptive.loggedDays} logged days and ${adaptive.weightSpanDays} days of weigh-ins, your next weekly check will use about ${adaptive.estimate} kcal/day as maintenance.` : `Log food on 10 days and weigh in across 14 days. Until then, the ${baselineTdee} kcal starting estimate remains active.`}</Text>
+      <Text style={styles.caution}>{profile?.adaptiveTdee ? `Active maintenance: ${profile.adaptiveTdee} kcal/day. The app adjusts at most 100 kcal/day in a weekly check.` : 'Nothing changes automatically from missing data.'}</Text>
     </Card>
 
     <SectionTitle title="Repeat a logged day" detail="optional shortcut" />
@@ -111,6 +109,8 @@ const styles = StyleSheet.create({
   reviewSummary: { color: colors.muted, lineHeight: 19, marginBottom: 10 },
   reviewItem: { color: colors.ink, lineHeight: 20, fontWeight: '700', marginVertical: 2 },
   caution: { color: colors.coral, fontSize: 11, lineHeight: 17, marginTop: 7 },
+  explainToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.paper, borderRadius: 12, padding: 11, marginBottom: 11 },
+  explainToggleText: { color: colors.pine, fontSize: 10, fontWeight: '900' }, explainArrow: { color: colors.pine, fontSize: 17, fontWeight: '900' },
   formula: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 5, backgroundColor: colors.paper, borderRadius: 14, padding: 12, marginBottom: 12 },
   formulaValue: { color: colors.pine, fontSize: 19, fontWeight: '900' },
   formulaLabel: { color: colors.muted, fontSize: 9, marginRight: 4 },
