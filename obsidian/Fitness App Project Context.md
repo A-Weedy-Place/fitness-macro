@@ -56,7 +56,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - **Adaptive plan:** after 14 calendar dates, 10 food-log days, and weights across the interval, observed maintenance may update no more than weekly, at ≤100 kcal/day per step. Missing data never lowers targets. Method details are collapsible.
 - **Account panels:** account Goal plan and Progress panels no longer jump to the main tab bar. Themes use production-safe `expo-updates` restart. Health Connect now declares its three read permissions, reads all allowed Health Connect origins, and shows an explicit result dialog.
 - The stale ignored mobile `.env` containing an old PC URL/pairing token was deleted. There is no mobile PC runtime path.
-- Validation: `npm run typecheck`, **13/13** mobile tests (including local-calendar/Monday-week coverage), Android config permission inspection, SDK-compatible `expo-updates`, and `git diff --check` pass. The intended preview build is `2748e908-771b-4f73-aad9-1e3145942d29` from `41bfd42`; an accidental duplicate EAS queue entry is not a separate product change.
+- Validation: `npm run typecheck`, **13/13** mobile tests (including local-calendar/Monday-week coverage), Android config permission inspection, SDK-compatible `expo-updates`, and `git diff --check` pass. Canonical preview build `2748e908-771b-4f73-aad9-1e3145942d29` from `41bfd42` finished successfully: `https://expo.dev/artifacts/eas/-dvLRhIbi5kZhkZ6dfmIysGT9MJq-RO7JDu2EVf8jJs.apk` (expires 2026-09-14). Its accidental duplicate has the same artifact fingerprint.
 
 ## Account and Android UI checkpoint - 2026-08-31
 
