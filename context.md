@@ -10,6 +10,8 @@
 - Optional login for the current local-first product is a device-only 4–8 digit PIN, stored in encrypted Expo SecureStore. It locks on backgrounding and has no subscription, server, email identity, password recovery, or cross-device account semantics. A real email/Google account must be designed with an authenticated backend later; do not imply that this PIN is one.
 - Appearance now offers Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. Brightness intentionally follows the phone's own system controls.
 - Added native Expo dependencies/config for Android navigation-bar control, profile photo picking, and encrypted local PIN storage. These native additions need a rebuilt APK for full realistic testing, though most layout work can still be inspected in Expo Go.
+- The phone now has a **You → Connections → PC agent link** form. It stores the PC URL in local app storage and the pairing token in encrypted SecureStore, so an installable APK does not bake in Wi-Fi details or need rebuilding after a router/IP change. On 2026-08-31 the active PC Wi-Fi address is `http://192.168.18.113:8787`; this is transient and must be changed in the phone form when the network changes.
+- The hidden background PC agent was restarted and verified over that LAN address. It reports Groq GPT-OSS planning enabled, Groq configured, paid tools disabled, and 7,756 local ingredients indexed.
 - Validation after this UI checkpoint: mobile TypeScript check + 12 tests pass; agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30

@@ -17,16 +17,53 @@ import {
 } from '../types';
 import { File } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
-const BASE_URL = process.env.EXPO_PUBLIC_AGENT_BASE_URL?.replace(/\/$/, '') || 'http://localhost:8787';
-const TOKEN = process.env.EXPO_PUBLIC_AGENT_PAIRING_TOKEN || 'dev-local-token';
+const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_AGENT_BASE_URL?.replace(/\/$/, '') || 'http://localhost:8787';
+const DEFAULT_TOKEN = process.env.EXPO_PUBLIC_AGENT_PAIRING_TOKEN || 'dev-local-token';
+const AGENT_BASE_URL_KEY = 'fitness-macro-agent-base-url-v1';
+const AGENT_TOKEN_KEY = 'fitness-macro-agent-token-v1';
+
+let baseUrl = DEFAULT_BASE_URL;
+let token = DEFAULT_TOKEN;
+
+export interface AgentConnection {
+  baseUrl: string;
+  hasSavedPairingToken: boolean;
+}
+
+function normalizeBaseUrl(value: string) {
+  const normalized = value.trim().replace(/\/$/, '');
+  if (!/^https?:\/\//i.test(normalized)) throw new Error('Use a complete address, for example http://192.168.18.113:8787');
+  return normalized;
+}
+
+export async function loadAgentConnection(): Promise<AgentConnection> {
+  const [savedUrl, savedToken] = await Promise.all([AsyncStorage.getItem(AGENT_BASE_URL_KEY), SecureStore.getItemAsync(AGENT_TOKEN_KEY)]);
+  if (savedUrl) baseUrl = normalizeBaseUrl(savedUrl);
+  if (savedToken) token = savedToken;
+  return { baseUrl, hasSavedPairingToken: Boolean(savedToken) };
+}
+
+export async function saveAgentConnection(next: { baseUrl: string; pairingToken: string }): Promise<AgentConnection> {
+  const normalizedUrl = normalizeBaseUrl(next.baseUrl);
+  const requestedToken = next.pairingToken.trim();
+  const savedToken = requestedToken ? null : await SecureStore.getItemAsync(AGENT_TOKEN_KEY);
+  const pairingToken = requestedToken || savedToken || (DEFAULT_TOKEN !== 'dev-local-token' ? DEFAULT_TOKEN : '');
+  if (!pairingToken) throw new Error('Enter the pairing token from agent/.env.');
+  await Promise.all([AsyncStorage.setItem(AGENT_BASE_URL_KEY, normalizedUrl), requestedToken ? SecureStore.setItemAsync(AGENT_TOKEN_KEY, pairingToken) : Promise.resolve()]);
+  baseUrl = normalizedUrl;
+  token = pairingToken;
+  return { baseUrl, hasSavedPairingToken: Boolean(requestedToken || savedToken) };
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-agent-token': TOKEN };
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-agent-token': token };
   if (init.headers) {
     for (const [key, value] of Object.entries(init.headers as Record<string, string>)) headers[key] = String(value);
   }
-  const response = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Agent returned ${response.status}: ${body}`);
@@ -106,11 +143,11 @@ export async function transcribeRecording(uri: string): Promise<{ text: string; 
   if (!audio.exists || audio.size <= 0) throw new Error('The phone created an empty recording. Please record again.');
   const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'm4a';
   const mimeType = audio.type || (extension === 'webm' ? 'audio/webm' : extension === 'wav' ? 'audio/wav' : 'audio/mp4');
-  const response = await expoFetch(`${BASE_URL}/v1/audio/transcribe`, {
+  const response = await expoFetch(`${baseUrl}/v1/audio/transcribe`, {
     method: 'POST',
     headers: {
       'content-type': mimeType,
-      'x-agent-token': TOKEN,
+      'x-agent-token': token,
       'x-audio-filename': `food-recording.${extension}`
     },
     body: audio

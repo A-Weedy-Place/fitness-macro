@@ -20,7 +20,7 @@ set +a
 npm run dev
 ```
 
-Keep the PC and phone on the same trusted network. In the mobile **You** tab, set the agent URL to `http://YOUR_PC_LAN_IP:8787` and enter the same pairing token. The status cards distinguish unavailable, configured, and connected services.
+Keep the PC and phone on the same trusted network. In the mobile **You → Connections → PC agent link** form, set the URL to `http://YOUR_PC_LAN_IP:8787` and enter the same pairing token. The URL is stored locally and the token is stored in encrypted device storage, so an APK does not need rebuilding after the PC receives a new LAN IP. The status cards distinguish unavailable, configured, and connected services.
 
 For routine use, put the agent behind a local HTTPS reverse proxy or a private overlay network such as Tailscale. Do not port-forward the plain HTTP development server to the public internet.
 

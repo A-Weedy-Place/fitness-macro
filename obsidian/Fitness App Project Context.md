@@ -14,6 +14,8 @@ updated: 2026-08-31
 - Current login scope is deliberately local and free: an optional 4–8 digit PIN in encrypted Expo SecureStore locks the app after backgrounding. It has no cloud identity, email/Google sign-in, recovery, or cross-device behavior. A real account requires a future authenticated backend.
 - Themes: Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. The app follows device brightness rather than changing it.
 - New Expo native dependencies/config cover system navigation-bar hiding, local photo selection, and encrypted PIN storage. Rebuild the APK to test native behavior realistically; Expo Go remains useful for UI iteration.
+- **You → Connections → PC agent link** now stores the PC URL locally and the pairing token in encrypted SecureStore. A release APK therefore does not bake in local Wi-Fi details and does not need rebuilding after an IP change. Current 2026-08-31 PC Wi-Fi address: `http://192.168.18.113:8787` (transient; update it in the phone form after any network change).
+- The background PC agent was restarted and verified through that LAN address: Groq GPT-OSS planning enabled, paid tools disabled, and 7,756 local ingredients indexed.
 - Verification: mobile type-check + 12 tests and agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30

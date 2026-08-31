@@ -9,13 +9,14 @@ import { buildDailySeries, latestWeightByDate } from '../logic/analytics';
 import { weeklyChangeForGoal } from '../logic/goals';
 import { cmToFeetInches, feetInchesToCm, kgToLb, lbToKg } from '../logic/units';
 import { activeTheme as loadedTheme, AppThemeName, colors, themeOptions } from '../theme';
-import { StravaStatus } from '../services/agentClient';
+import { AgentConnection, StravaStatus } from '../services/agentClient';
 import { HealthConnectStatus } from '../services/healthConnect';
 
 type Panel = 'profile' | 'appearance' | 'connections' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, strava, healthConnect, audioConfigured, appAgentEnabled, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, onOpenTab, pinEnabled, onSetLocalPin, onSync, onLoadDemo, onExport, onImport, onConnectStrava, onSyncStrava, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
+export function ProfileScreen({ state, date, status, strava, healthConnect, audioConfigured, appAgentEnabled, agentConnection, onSaveAgentConnection, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, onOpenTab, pinEnabled, onSetLocalPin, onSync, onLoadDemo, onExport, onImport, onConnectStrava, onSyncStrava, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
   state: AppState; date: string; status: string; strava: StravaStatus | null; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
+  agentConnection: AgentConnection; onSaveAgentConnection: (input: { baseUrl: string; pairingToken: string }) => Promise<void>;
   activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>; onOpenTab: (tab: TabKey) => void;
   pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onSync: () => void; onLoadDemo: () => void; onExport: () => string; onImport: (text: string) => void;
   onConnectStrava: () => void; onSyncStrava: () => void; onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
@@ -42,6 +43,8 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
   const [showRestore, setShowRestore] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [agentUrl, setAgentUrl] = useState(agentConnection.baseUrl);
+  const [agentToken, setAgentToken] = useState('');
 
   useEffect(() => {
     if (!profile) return;
@@ -50,6 +53,8 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
     const preferredWeight = profile.preferredWeightUnit || 'kg';
     setName(profile.displayName || ''); setSex(profile.sex); setAge(String(profile.ageYears)); setHeightUnit(preferredHeight); setHeight(String(profile.heightCm)); setFeet(String(imperial.feet)); setInches(String(imperial.inches)); setWeightUnit(preferredWeight); setWeight(String(preferredWeight === 'lb' ? kgToLb(profile.bodyWeightKg).toFixed(1) : profile.bodyWeightKg)); setTarget(String(preferredWeight === 'lb' && profile.targetWeightKg ? kgToLb(profile.targetWeightKg).toFixed(1) : profile.targetWeightKg || '')); setFactor(String(profile.activityFactor)); setMode(profile.goalMode === 'lose' || profile.goalMode === 'gain' ? profile.goalMode : 'maintain'); setIntensity(profile.goalIntensity || 'moderate'); setTargetDate(profile.targetDate || date);
   }, [profile?.updatedAt, date]);
+
+  useEffect(() => { setAgentUrl(agentConnection.baseUrl); }, [agentConnection.baseUrl]);
 
   const year = useMemo(() => {
     const series = buildDailySeries({ endDate: date, days: 365, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
@@ -109,6 +114,16 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
     await onSetLocalPin(pin); setPin(''); setConfirmPin(''); setPanel(null);
   }
 
+  async function saveAgentLink() {
+    try {
+      await onSaveAgentConnection({ baseUrl: agentUrl, pairingToken: agentToken });
+      setAgentToken('');
+      Alert.alert('PC agent linked', 'The phone can now use this PC for voice transcription and food actions while both devices are on the same trusted network.');
+    } catch (error) {
+      Alert.alert('Could not save PC agent link', error instanceof Error ? error.message : 'Check the address and pairing token, then try again.');
+    }
+  }
+
   function displayWeight(value?: number) { if (value == null) return 'No check-in'; return profile?.preferredWeightUnit === 'lb' ? `${kgToLb(value).toFixed(1)} lb` : `${value.toFixed(1)} kg`; }
   const goalLabel = profile?.goalMode === 'lose' ? 'Lose weight' : profile?.goalMode === 'gain' ? 'Build weight / muscle' : 'Maintain weight';
   const healthLabel = healthConnect?.permissionGranted ? 'Connected' : healthConnect?.developmentBuildRequired ? 'Needs APK build' : healthConnect?.available ? 'Ready to connect' : 'Checking phone';
@@ -144,7 +159,7 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
 
     {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Changing a theme reloads the app once so every screen updates together.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>FitnessMacro follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
 
-    {panel === 'connections' ? <><SectionTitle title="Connections" detail="only enable what you use" /><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={audioConfigured ? 'Groq Whisper transcription and Groq planner are ready through your PC agent.' : 'Add the free Groq key to agent/.env and keep the PC agent running.'} state={voiceLabel} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Health Connect can share daily weight and exercise calories after you allow it.'} state={healthLabel} /><View style={styles.actions}>{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="secondary" onPress={onOpenHealthSettings} /> : <Button label="Connect Health" compact tone="secondary" onPress={onConnectHealth} />}<Button label="Refresh" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail={strava?.connected ? 'Connected as an optional activity-data fallback.' : strava?.configured ? 'Optional fallback when Health Connect is not used.' : 'Not configured. Health Connect is preferred on Android.'} state={strava?.connected ? 'Connected' : strava?.configured ? 'Ready to connect' : 'Not configured'} />{strava?.connected ? <Button label="Sync Strava API" compact tone="ghost" onPress={onSyncStrava} /> : strava?.configured ? <Button label="Connect Strava fallback" compact tone="ghost" onPress={onConnectStrava} /> : null}<ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation." state={appAgentEnabled ? 'Ready' : 'PC agent unavailable'} /></Card></> : null}
+    {panel === 'connections' ? <><SectionTitle title="Connections" detail="only enable what you use" /><Card><Text style={styles.rowTitle}>PC agent link</Text><Text style={styles.systemDetail}>Use this phone’s current PC Wi-Fi address. It is saved on the phone, so changing networks never requires rebuilding the APK.</Text><Field label="PC agent address" value={agentUrl} onChangeText={setAgentUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="http://192.168.18.113:8787" /><Field label={agentConnection.hasSavedPairingToken ? 'Pairing token (leave blank to keep saved token)' : 'Pairing token from agent/.env'} value={agentToken} onChangeText={setAgentToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder={agentConnection.hasSavedPairingToken ? 'Stored securely on this phone' : 'Enter pairing token'} /><Button label="Save PC agent link" compact tone="secondary" onPress={() => void saveAgentLink()} /></Card><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={audioConfigured ? 'Groq Whisper transcription and Groq planner are ready through your PC agent.' : 'Add the free Groq key to agent/.env and keep the PC agent running.'} state={voiceLabel} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Health Connect can share daily weight and exercise calories after you allow it.'} state={healthLabel} /><View style={styles.actions}>{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="secondary" onPress={onOpenHealthSettings} /> : <Button label="Connect Health" compact tone="secondary" onPress={onConnectHealth} />}<Button label="Refresh" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail={strava?.connected ? 'Connected as an optional activity-data fallback.' : strava?.configured ? 'Optional fallback when Health Connect is not used.' : 'Not configured. Health Connect is preferred on Android.'} state={strava?.connected ? 'Connected' : strava?.configured ? 'Ready to connect' : 'Not configured'} />{strava?.connected ? <Button label="Sync Strava API" compact tone="ghost" onPress={onSyncStrava} /> : strava?.configured ? <Button label="Connect Strava fallback" compact tone="ghost" onPress={onConnectStrava} /> : null}<ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation." state={appAgentEnabled ? 'Ready' : 'PC agent unavailable'} /></Card></> : null}
 
     {panel === 'security' ? <><SectionTitle title="Local app lock" detail="optional device-only protection" /><Card><Text style={styles.explainer}>A PIN protects the app after it is sent to the background. The PIN is stored in your phone’s encrypted storage, not in a cloud account.</Text>{pinEnabled ? <><Text style={styles.ready}>A local PIN is enabled.</Text><Button label="Remove local PIN" tone="danger" onPress={() => Alert.alert('Remove local PIN?', 'Anyone with this phone will be able to open FitnessMacro.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove PIN', style: 'destructive', onPress: () => void onSetLocalPin(null).then(() => setPanel(null)) }])} /></> : <><Field label="Choose 4–8 digit PIN" value={pin} onChangeText={(value) => setPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Field label="Confirm PIN" value={confirmPin} onChangeText={(value) => setConfirmPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Button label="Enable local PIN" onPress={() => void savePin()} /></>}</Card></> : null}
 

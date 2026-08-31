@@ -45,7 +45,7 @@ import {
   upsertWeight
 } from './src/storage/localDb';
 import { flushPendingOperations, pullAllFromAgent, searchAndCacheFoods } from './src/services/sync';
-import { agentStatus, audioStatus, getGoalRecommendation, getStravaAuthorizationUrl, getStravaStatus, GoalReviewResponse, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, StravaStatus, syncStrava, transcribeRecording } from './src/services/agentClient';
+import { agentStatus, AgentConnection, audioStatus, getGoalRecommendation, getStravaAuthorizationUrl, getStravaStatus, GoalReviewResponse, loadAgentConnection, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, saveAgentConnection, StravaStatus, syncStrava, transcribeRecording } from './src/services/agentClient';
 import { recommendDailyGoal } from './src/logic/tdee';
 import { buildPlanFromDay, instantiatePlan } from './src/logic/plans';
 import { shiftDate, today } from './src/utils/dates';
@@ -98,6 +98,7 @@ function FitnessApp() {
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
   const [assistantBusy, setAssistantBusy] = useState(false);
+  const [agentConnection, setAgentConnection] = useState<AgentConnection>({ baseUrl: 'http://localhost:8787', hasSavedPairingToken: false });
   const [lockReady, setLockReady] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -119,6 +120,10 @@ function FitnessApp() {
       setUnlocked(true);
       setLockReady(true);
     });
+  }, []);
+
+  useEffect(() => {
+    void loadAgentConnection().then(setAgentConnection).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -436,6 +441,13 @@ function FitnessApp() {
     await commit(setProfile(state, profile), [operation('profile', input)], profilePhotoUri ? 'Profile photo updated' : 'Profile photo removed');
   }
 
+  async function updateAgentConnection(input: { baseUrl: string; pairingToken: string }) {
+    const saved = await saveAgentConnection(input);
+    setAgentConnection(saved);
+    setStatus(`PC agent link saved for ${saved.baseUrl}.`);
+    await refreshIntegrationStatus();
+  }
+
   async function setLocalPin(pin: string | null) {
     if (pin) {
       await SecureStore.setItemAsync(LOCAL_PIN_KEY, pin);
@@ -648,7 +660,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} agentConnection={agentConnection} onSaveAgentConnection={updateAgentConnection} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>
