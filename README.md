@@ -1,69 +1,29 @@
-# Local-First Nutrition App
+# FitnessMacro
 
-Goal: deliver a mobile-first nutrition workflow similar to MacroFactor/FitnessPal without paid third-party lock-in, with local ownership first and optional local PC enrichment.
+FitnessMacro is a standalone, local-first Android nutrition diary. The app keeps the diary, cookbook, recipes, goals, trends, profile, local PIN, and backups on the phone.
 
-## Current repo structure
-- `agent/` local PC service with a REST contract for nutrition lookup, weighting, entries, and export.
-- `mobile/` Expo app skeleton with local-first state, meal/weight models, and sync hooks to the agent.
-- `context.md` evolving project memory, decisions, and risk log.
+AI is online but does not require a PC or a user-supplied API key:
 
-## Runbook (bootstrap)
-1. Start agent service:
-
-```powershell
-Set-Location C:\Users\pc\Desktop\UwU\fitness\agent
-npm install
-npm run dev:env
+```text
+FitnessMacro APK → private Cloudflare Worker → Groq
+                         └→ encrypted GROQ_API_KEY secret
 ```
 
-2. Start mobile app:
+- Speech-to-text: Groq `whisper-large-v3-turbo`.
+- Food and action planning: Groq `openai/gpt-oss-120b`.
+- Safe deterministic target calculation remains in the app; AI only proposes confirmation-gated actions and meal structure.
+- The Worker does not persist raw audio, diary entries, recipes, or profile data.
 
-```powershell
-Set-Location C:\Users\pc\Desktop\UwU\fitness\mobile
-npm install
-npm start -- --lan
-```
+## Repository layout
 
-3. Open in Expo Go on phone or simulator.
+- `mobile/` — Expo/React Native app and local-first data store (schema 7).
+- `relay/` — Cloudflare Worker which holds the Groq key in an encrypted secret and exposes only the required AI and Open Food Facts routes.
+- `context.md` and `obsidian/` — maintained project memory and design decisions.
 
-## What is already implemented in this baseline
-- Agent API endpoints for search/barcode/resolve/custom foods/entries/weights/activities/profile/goals/export
-- Token-based agent pairing
-- JSON persistence with schema versioning on agent and mobile
-- Mobile diary, macro targets, custom foods, weight trend, manual activity logging, and offline replay queue
-- Expo SDK 57 / React Native 0.86 baseline aligned with the current stable Expo compatibility table
-- Project notes + Obsidian sync target
+## Owner testing
 
-## Security model
-- The mobile app keeps primary user data on-device.
-- Agent is optional; it is called only for food enrichment and optional remote fallback.
-- Token header is required for all agent routes: `x-agent-token`.
-- All PC sync endpoints are intentionally minimal and audit-friendly.
+An installable Android preview APK is built with EAS. It already contains the relay address and a rotatable private-test access token; the tester does not enter a key or connect to a PC. See [standalone testing](docs/standalone-testing.md).
 
-## Why this scaffolding matters
-- You avoid dependency on MyFitnessPal/MacroFactor public APIs.
-- You get control over the food model, country-specific entries, and future Strava extension.
-- You can improve parsing and voice flows in phase 2 without changing local schema.
+## Security boundary
 
-## Planned milestones
-- Phase 0: local schema + agent contract + offline-first baseline
-- Phase 1: diary + macro math + weight trend + recipe support
-- Phase 2: Groq voice/LLM extraction path + confidence-based confirmation
-- Phase 3: optional Strava OAuth/activity import
-- Phase 4: polish, export/import, conflict resolution
-
-## Data schema version
-- Current version in store: `5`
-
-## Current mobile experience
-
-The app now uses five dedicated tabs for daily logging, reusable food plans, detailed trends, food intelligence, and profile/targets. Graphs include calorie-vs-target bars, weight plus rolling trend, macro energy split, logging consistency, and calories by meal.
-
-See `docs/testing-guide.md` before the first phone test.
-
-For the current no-subscription Groq transcription and food-agent setup on Windows, see `docs/free-groq-agent-setup.md`.
-
-## Open questions for next pass
-- Obsidian vault sync path and cadence
-- CSV export format details
-- Strava ingestion method (webhook vs polling first)
+The Groq key is never committed or bundled in the APK. The current private test build contains a separate relay access token, which is rotatable but extractable from an APK; it protects against casual abuse only. Add real account/device authentication before broader distribution.

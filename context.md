@@ -20,8 +20,10 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 - There is no PC hop, PC IP address, LAN pairing token, local background agent, Codex CLI, or desktop dependency in the target architecture.
 - The Groq key must never be embedded, encoded, obfuscated, or hashed inside the APK: a hash cannot call Groq, and any usable embedded secret can be extracted. Normal consumer apps solve this by keeping the key only on their backend.
-- The relay will use a no-cost Cloudflare Worker initially. Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request—sufficient for a thin proxy—and supports encrypted Worker secrets. The Groq free tier remains the model-cost constraint. See the official [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/) and [secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/).
-- The relay still needs proper user/device authentication before a public release. For the owner's private testing APK, the first relay stage will remain private and rate-limited; it will not put the Groq key in the app.
+- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. The Worker only relays required AI requests and Open Food Facts lookups. It stores no diary, profile, recipe, or raw-audio data.
+- Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists `openai/gpt-oss-120b` at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Official sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
+- The private Worker has a 60-request/hour per-warm-isolate cap. The app sends a maximum 6,000-character compact local context and asks GPT-OSS for at most 1,000 completion tokens. A fast burst of several independent structured requests can still hit Groq’s 8K TPM ceiling; local logging remains usable and the app tells the owner to retry later.
+- A preview APK contains a separate rotatable relay access token from EAS. It is not the Groq key, but it is extractable from an APK and therefore is only an owner-test safeguard. Proper account/device authentication and durable global rate limits are required before public distribution.
 
 ### Delivery process required by the owner
 
@@ -33,9 +35,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 ### Migration state
 
-- The checked-in `agent/` Express service, `mobile/src/services/agentClient.ts`, mobile sync queue, PC-agent connection form, pairing token, and LAN configuration are **deprecated migration code**. Do not add new functionality to them.
-- Do not delete the PC route until the Cloudflare relay replacement has passed the focused APK test; then delete the complete obsolete path rather than carrying two AI architectures.
-- Already removed and never to be restored: Codex CLI execution/fallback, local Whisper/Python service, multi-provider selection, and any paid Groq browser/search tools.
+- The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archival copy and is not used at runtime.
+- `mobile/src/services/agentClient.ts` now calls the Worker directly. Local state is schema **7** and has no remote-operation queue or last-synced timestamp.
+- `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
+
+### Standalone relay validation — 2026-08-31
+
+- **You → Connections** now shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains an optional free Android-native integration; Strava is deliberately a later secure-hosted stage.
+- Android clear-text traffic is disabled because AI/reference requests use HTTPS.
+- Validation: Worker TypeScript passes; mobile TypeScript and 12 mobile tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call received Groq’s expected free-tier `429`, confirming that this personal free tier should not be burst-tested.
 
 ## Account and Android UI checkpoint - 2026-08-31
 

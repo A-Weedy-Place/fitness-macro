@@ -34,7 +34,7 @@ export async function syncHealthConnect(requestAccess = false, days = 30): Promi
       granted = await health.requestPermission(permissions);
       permissionGranted = permissions.some((required) => granted.some((item) => item.accessType === required.accessType && item.recordType === required.recordType));
     }
-    if (!permissionGranted) return { status: { available: true, permissionGranted: false, developmentBuildRequired: false, message: 'Permission is needed once to read weight and Strava calorie records.' }, activities: [], weights: [] };
+    if (!permissionGranted) return { status: { available: true, permissionGranted: false, developmentBuildRequired: false, message: 'Permission is needed once to read weight and exercise-calorie records.' }, activities: [], weights: [] };
     const end = new Date();
     const start = new Date(end.getTime() - days * 86400000);
     const options = { timeRangeFilter: { operator: 'between' as const, startTime: start.toISOString(), endTime: end.toISOString() }, dataOriginFilter: ['com.strava'] };
@@ -54,7 +54,7 @@ export async function syncHealthConnect(requestAccess = false, days = 30): Promi
       return {
         id: `health_strava_${id}`,
         date: localDate(startTime),
-        name: 'Strava activity',
+        name: 'Health Connect activity',
         source: 'strava' as const,
         type: 'health_connect',
         durationMinutes: Math.max(1, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000)),
@@ -77,7 +77,7 @@ export async function syncHealthConnect(requestAccess = false, days = 30): Promi
       if (item.weightKg > 0 && (!current || item.enteredAt >= current.enteredAt)) latestByDate.set(item.date, item);
     }
     const weights = [...latestByDate.values()];
-    const found = [`${weights.length} weight`, `${activities.length} Strava calorie`].join(' and ');
+    const found = [`${weights.length} weight`, `${activities.length} exercise-calorie`].join(' and ');
     return { status: { available: true, permissionGranted: true, developmentBuildRequired: false, message: `Connected. Found ${found} record(s) from the last ${days} days.` }, activities, weights };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

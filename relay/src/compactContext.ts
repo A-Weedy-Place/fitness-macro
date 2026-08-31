@@ -1,9 +1,6 @@
 type JsonRecord = Record<string, unknown>;
 
-const STOP_WORDS = new Set([
-  'a', 'an', 'and', 'at', 'ate', 'for', 'from', 'had', 'i', 'in', 'it', 'log', 'me', 'my',
-  'of', 'on', 'one', 'please', 'some', 'the', 'this', 'to', 'today', 'two', 'was', 'with'
-]);
+const STOP_WORDS = new Set(['a', 'an', 'and', 'at', 'ate', 'for', 'from', 'had', 'i', 'in', 'it', 'log', 'me', 'my', 'of', 'on', 'one', 'please', 'some', 'the', 'this', 'to', 'today', 'two', 'was', 'with']);
 
 function record(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
@@ -27,11 +24,7 @@ function searchable(value: unknown): string {
 function ranked(items: JsonRecord[], queryTerms: string[], limit: number): JsonRecord[] {
   if (!queryTerms.length) return items.slice(-Math.min(limit, 6));
   return items
-    .map((item, index) => {
-      const text = searchable(item);
-      const score = queryTerms.reduce((sum, term) => sum + (text.includes(term) ? 1 : 0), 0);
-      return { item, score, index };
-    })
+    .map((item, index) => ({ item, score: queryTerms.reduce((sum, term) => sum + (searchable(item).includes(term) ? 1 : 0), 0), index }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || b.index - a.index)
     .slice(0, limit)
@@ -55,6 +48,8 @@ export function compactAppContext(command: string, input: unknown): JsonRecord {
   const allEntries = records(source.entries);
   const todayEntries = allEntries.filter((entry) => entry.date === currentDate).slice(-24);
   const matchedEntries = ranked(allEntries.filter((entry) => entry.date !== currentDate), queryTerms, 8);
+  const recipes = ranked(records(source.recipes), queryTerms, 12);
+  const userFoods = ranked(records(source.userFoods), queryTerms, 20);
   const context: JsonRecord = {
     currentDate,
     currentTime: source.currentTime,
@@ -63,24 +58,15 @@ export function compactAppContext(command: string, input: unknown): JsonRecord {
     entries: [...todayEntries, ...matchedEntries],
     weights: records(source.weights).slice(-8),
     activities: records(source.activities).slice(-8),
-    recipes: ranked(records(source.recipes), queryTerms, 12),
+    recipes,
     plans: ranked(records(source.plans), queryTerms, 8),
-    userFoods: ranked(records(source.userFoods), queryTerms, 20),
+    userFoods,
     capabilities: source.capabilities,
     retrieval: {
       strategy: 'local_lexical_top_matches',
-      supplied: {
-        entries: todayEntries.length + matchedEntries.length,
-        recipes: ranked(records(source.recipes), queryTerms, 12).length,
-        userFoods: ranked(records(source.userFoods), queryTerms, 20).length
-      },
-      totalAvailable: {
-        entries: allEntries.length,
-        recipes: records(source.recipes).length,
-        userFoods: records(source.userFoods).length
-      }
+      supplied: { entries: todayEntries.length + matchedEntries.length, recipes: recipes.length, userFoods: userFoods.length },
+      totalAvailable: { entries: allEntries.length, recipes: records(source.recipes).length, userFoods: records(source.userFoods).length }
     }
   };
-  const maxChars = Math.min(Math.max(Number(process.env.GROQ_MAX_CONTEXT_CHARS || 10_000), 4_000), 20_000);
-  return trimToBudget(context, maxChars);
+  return trimToBudget(context, 6_000);
 }

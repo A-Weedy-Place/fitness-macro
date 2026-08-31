@@ -1,20 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityEntry, AppState, BodyMetricLog, DailyGoal, FoodEntry, FoodItem, MealPlan, PendingOperation, Recipe, UserProfile } from '../types';
+import { ActivityEntry, AppState, BodyMetricLog, DailyGoal, FoodEntry, FoodItem, MealPlan, Recipe, UserProfile } from '../types';
 import { STARTER_FOODS } from '../data/starterFoods';
 
-const KEY = 'fitness-app-state-v6';
-const LEGACY_KEYS = ['fitness-app-state-v5', 'fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
+const KEY = 'fitness-app-state-v7';
+const LEGACY_KEYS = ['fitness-app-state-v6', 'fitness-app-state-v5', 'fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
 
 export const EMPTY_STATE: AppState = {
-  version: 6,
+  version: 7,
   foods: [...STARTER_FOODS],
   entries: [],
   weights: [],
   activities: [],
   goals: [],
   plans: [],
-  recipes: [],
-  pendingOperations: []
+  recipes: []
 };
 
 function migrate(input: Partial<AppState> & { version?: number }): AppState {
@@ -29,7 +28,7 @@ function migrate(input: Partial<AppState> & { version?: number }): AppState {
     }
   }
   return {
-    version: 6,
+    version: 7,
     profile: input.profile ? { ...input.profile, onboardingComplete: input.profile.onboardingComplete ?? true } : undefined,
     foods: [...foods.values()],
     entries: Array.isArray(input.entries) ? input.entries.map((entry) => ({ ...entry, eatenAt: entry.eatenAt || fallbackTime[entry.mealType] })) : [],
@@ -38,9 +37,7 @@ function migrate(input: Partial<AppState> & { version?: number }): AppState {
     goals: Array.isArray(input.goals) ? input.goals : [],
     plans: Array.isArray(input.plans) ? input.plans.map((plan) => ({ ...plan, items: plan.items.map((item) => ({ ...item, eatenAt: item.eatenAt || fallbackTime[item.mealType] })) })) : [],
     recipes: Array.isArray(input.recipes) ? input.recipes : [],
-    nutritionProgram: input.nutritionProgram,
-    pendingOperations: Array.isArray(input.pendingOperations) ? input.pendingOperations : [],
-    lastSyncedAt: input.lastSyncedAt
+    nutritionProgram: input.nutritionProgram
   };
 }
 
@@ -118,9 +115,4 @@ export function removePlan(state: AppState, id: string): AppState {
 
 export function setProfile(state: AppState, profile: UserProfile): AppState {
   return { ...state, profile };
-}
-
-export function enqueueOperation(state: AppState, operation: PendingOperation): AppState {
-  if (state.pendingOperations.some((candidate) => candidate.id === operation.id)) return state;
-  return { ...state, pendingOperations: [...state.pendingOperations, operation] };
 }

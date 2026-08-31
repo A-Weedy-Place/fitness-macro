@@ -112,11 +112,10 @@ test('goal pace is derived from deadline and capped by body weight', () => {
   assert.equal(weekly, -0.75);
 });
 
-test('portable backup migrates to schema 6 without pending secrets or operations', () => {
-  const state = restorePortableBackup(createPortableBackup({ version: 6, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [], pendingOperations: [] }));
-  assert.equal(state.version, 6);
+test('portable backup migrates to schema 7 without connection data', () => {
+  const state = restorePortableBackup(createPortableBackup({ version: 7, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [] }));
+  assert.equal(state.version, 7);
   assert.equal(state.entries[0].eatenAt, '13:00');
-  assert.equal(state.pendingOperations.length, 0);
 });
 
 test('one weigh-in is retained per calendar day, with the latest replacing the first', () => {

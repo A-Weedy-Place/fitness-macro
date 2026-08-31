@@ -1,34 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, AppState as NativeAppState, DevSettings, LayoutAnimation, Linking, StatusBar, StyleSheet, View } from 'react-native';
+import { Alert, AppState as NativeAppState, DevSettings, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SecureStore from 'expo-secure-store';
 import {
   ActivityEntry,
-  ActivityInput,
   AgentResolution,
   AssistantAction,
   AssistantMessage,
   AssistantPlan,
   AppState,
   BodyMetricLog,
-  CustomFoodInput,
   FoodEntry,
-  FoodEntryInput,
   FoodItem,
   MealPlan,
   MealType,
   NutritionProgram,
-  PendingOperation,
   ProfileInput,
   Recipe,
   RecipeInput,
   UserProfile,
-  WeightInput
 } from './src/types';
 import {
   EMPTY_STATE,
-  enqueueOperation,
   loadState,
   removeActivity,
   removeEntry,
@@ -44,8 +38,7 @@ import {
   upsertRecipe,
   upsertWeight
 } from './src/storage/localDb';
-import { flushPendingOperations, pullAllFromAgent, searchAndCacheFoods } from './src/services/sync';
-import { agentStatus, AgentConnection, audioStatus, getGoalRecommendation, getStravaAuthorizationUrl, getStravaStatus, GoalReviewResponse, loadAgentConnection, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, saveAgentConnection, StravaStatus, syncStrava, transcribeRecording } from './src/services/agentClient';
+import { agentStatus, audioStatus, getGoalRecommendation, GoalReviewResponse, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, searchFoods as searchHostedFoods, transcribeRecording } from './src/services/agentClient';
 import { recommendDailyGoal } from './src/logic/tdee';
 import { buildPlanFromDay, instantiatePlan } from './src/logic/plans';
 import { shiftDate, today } from './src/utils/dates';
@@ -90,7 +83,6 @@ function FitnessApp() {
   const [quickLogVisible, setQuickLogVisible] = useState(false);
   const [quickLogTime, setQuickLogTime] = useState('12:00');
   const [status, setStatus] = useState('All data is stored locally first.');
-  const [strava, setStrava] = useState<StravaStatus | null>(null);
   const [audioConfigured, setAudioConfigured] = useState<boolean | null>(null);
   const [appAgentEnabled, setAppAgentEnabled] = useState<boolean | null>(null);
   const [goalReview, setGoalReview] = useState<GoalReviewResponse | null>(null);
@@ -98,7 +90,6 @@ function FitnessApp() {
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
   const [assistantBusy, setAssistantBusy] = useState(false);
-  const [agentConnection, setAgentConnection] = useState<AgentConnection>({ baseUrl: 'http://localhost:8787', hasSavedPairingToken: false });
   const [lockReady, setLockReady] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -120,10 +111,6 @@ function FitnessApp() {
       setUnlocked(true);
       setLockReady(true);
     });
-  }, []);
-
-  useEffect(() => {
-    void loadAgentConnection().then(setAgentConnection).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -149,37 +136,22 @@ function FitnessApp() {
     setActiveTab(tab);
   }
 
-  async function commit(nextState: AppState, operations: PendingOperation[], success: string) {
-    let queued = nextState;
-    for (const operation of operations) queued = enqueueOperation(queued, operation);
-    setState(queued);
-    const result = await flushPendingOperations(queued);
-    setState(result.state);
-    setStatus(result.failed ? `${success}. ${result.failed} change(s) are waiting for the PC.` : `${success}. Synced with the PC.`);
-  }
-
-  function operation<K extends PendingOperation['kind']>(kind: K, payload: Extract<PendingOperation, { kind: K }>['payload']): Extract<PendingOperation, { kind: K }> {
-    return { id: makeId('op'), kind, payload, createdAt: now() } as Extract<PendingOperation, { kind: K }>;
+  async function commit(nextState: AppState, success: string) {
+    setState(nextState);
+    setStatus(success);
   }
 
   async function addPlate(items: PlateItem[], eatenAt: string, logDate = date) {
     const mealType = mealForTime(eatenAt);
     const enteredAt = now();
     let next = state;
-    const operations: PendingOperation[] = [];
-    const queuedFoods = new Set<string>();
     for (const item of items) {
       const id = makeId('entry');
-      const payload: FoodEntryInput = { clientId: id, date: logDate, eatenAt, mealType, foodId: item.food.id, portion: { foodId: item.food.id, quantity: item.quantity, unit: item.food.serving.unit }, note: item.note };
-      const entry: FoodEntry = { id, date: logDate, eatenAt, mealType, foodId: item.food.id, portion: payload.portion, note: item.note, enteredAt, source: { source: 'manual', confidence: 1 } };
+      const portion = { foodId: item.food.id, quantity: item.quantity, unit: item.food.serving.unit };
+      const entry: FoodEntry = { id, date: logDate, eatenAt, mealType, foodId: item.food.id, portion, note: item.note, enteredAt, source: { source: 'manual', confidence: 1 } };
       next = upsertEntry(next, entry);
-      if (item.food.tags?.includes('starter') && !queuedFoods.has(item.food.id)) {
-        queuedFoods.add(item.food.id);
-        operations.push(operation('food', { clientId: item.food.id, name: item.food.name, brand: item.food.brand, barcode: item.food.barcode, serving: item.food.serving, nutrition: item.food.nutrition }));
-      }
-      operations.push(operation('entry', payload));
     }
-    await commit(next, operations, `${items.length} food${items.length === 1 ? '' : 's'} added at ${eatenAt}`);
+    await commit(next, `${items.length} food${items.length === 1 ? '' : 's'} added at ${eatenAt}`);
   }
 
   async function addFoodEntry(food: FoodItem, quantity: number, eatenAt: string, note?: string) {
@@ -189,9 +161,8 @@ function FitnessApp() {
   async function addWeight(weightKg: number) {
     const id = state.weights.find((item) => item.date === date)?.id || makeId('weight');
     const enteredAt = now();
-    const payload: WeightInput = { clientId: id, date, weightKg };
     const item: BodyMetricLog = { id, date, weightKg, enteredAt };
-    await commit(upsertWeight(state, item), [operation('weight', payload)], 'Weight logged');
+    await commit(upsertWeight(state, item), 'Weight logged');
   }
 
   async function addActivity(name: string, durationMinutes: number) {
@@ -199,32 +170,24 @@ function FitnessApp() {
     const createdAt = now();
     const currentWeight = state.weights.filter((item) => item.date <= date).sort((a, b) => b.date.localeCompare(a.date))[0]?.weightKg || state.profile?.bodyWeightKg || 75;
     const caloriesEstimated = estimateActivityCalories(name, durationMinutes, currentWeight).calories;
-    const payload: ActivityInput = { clientId: id, date, name, type: name.toLowerCase(), durationMinutes, caloriesEstimated };
-    const item: ActivityEntry = { id, date, name, type: payload.type, durationMinutes, caloriesEstimated, source: 'manual', createdAt };
-    await commit(upsertActivity(state, item), [operation('activity', payload)], 'Activity logged');
+    const item: ActivityEntry = { id, date, name, type: name.toLowerCase(), durationMinutes, caloriesEstimated, source: 'manual', createdAt };
+    await commit(upsertActivity(state, item), 'Activity logged');
   }
 
   async function createCustomFood(values: { name: string; brand?: string; servingGrams: number; calories: number; protein: number; carbs: number; fat: number }) {
     const id = makeId('food');
     const timestamp = now();
     const scale = 100 / values.servingGrams;
-    const payload: CustomFoodInput = {
-      clientId: id,
-      name: values.name,
-      brand: values.brand,
-      serving: { unit: 'serving', amount: 1, gramsPerUnit: values.servingGrams },
-      nutrition: { calories: values.calories * scale, protein: values.protein * scale, carbs: values.carbs * scale, fat: values.fat * scale }
-    };
-    const food: FoodItem = { id, name: payload.name, brand: payload.brand, serving: payload.serving, nutrition: payload.nutrition, createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 } };
-    await commit(upsertFood(state, food), [operation('food', payload)], `${food.name} saved to your library`);
+    const food: FoodItem = { id, name: values.name, brand: values.brand, serving: { unit: 'serving', amount: 1, gramsPerUnit: values.servingGrams }, nutrition: { calories: values.calories * scale, protein: values.protein * scale, carbs: values.carbs * scale, fat: values.fat * scale }, createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 } };
+    await commit(upsertFood(state, food), `${food.name} saved to your library`);
     return food;
   }
 
   async function searchFoods(query: string) {
     const local = state.foods.filter((food) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(query.toLowerCase()));
     try {
-      const result = await searchAndCacheFoods(state, query);
-      setState(result.state);
+      const result = await searchHostedFoods(query, 8);
+      setState((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
       const combined = [...local, ...result.items];
       const unique = combined.filter((food, index) => combined.findIndex((candidate) => candidate.id === food.id) === index);
       const normalized = query.toLowerCase().trim();
@@ -284,13 +247,12 @@ function FitnessApp() {
     const eatenAt = plan.log.eatenAt || fallbackTime;
     const logDate = plan.log.date || date;
     const mealType = mealForTime(eatenAt);
-    const entryPayload: FoodEntryInput = { clientId: entryId, date: logDate, eatenAt, mealType, foodId, portion: { foodId, quantity: plan.log.quantity || 1, unit: 'serving' }, note: 'Created and logged by the AI assistant.' };
-    const entry: FoodEntry = { id: entryId, date: logDate, eatenAt, mealType, foodId, portion: entryPayload.portion, note: entryPayload.note, enteredAt: timestamp, source: { source: 'llm', confidence } };
+    const portion = { foodId, quantity: plan.log.quantity || 1, unit: 'serving' };
+    const entry: FoodEntry = { id: entryId, date: logDate, eatenAt, mealType, foodId, portion, note: 'Created and logged by the AI assistant.', enteredAt: timestamp, source: { source: 'llm', confidence } };
     let next = state;
     for (const resolved of resolution.foods) next = upsertFood(next, resolved);
     next = upsertEntry(upsertRecipe(upsertFood(next, food), recipe), entry);
-    const foodPayload: CustomFoodInput = { clientId: foodId, name: food.name, serving: food.serving, nutrition: food.nutrition };
-    await commit(next, [operation('food', foodPayload), operation('entry', entryPayload)], `${food.name} created, saved, and logged`);
+    await commit(next, `${food.name} created, saved, and logged`);
   }
 
   function changeTheme(theme: AppThemeName) {
@@ -357,7 +319,7 @@ function FitnessApp() {
     setAssistantBusy(true);
     try {
       let next = state;
-      const operations: PendingOperation[] = [];
+      let appliedChanges = 0;
       let destination: TabKey | null = null;
       const timestamp = now();
       const foodFor = (ingredient: AssistantAction['ingredients'][number]): FoodItem => {
@@ -365,14 +327,14 @@ function FitnessApp() {
         if (existing) return existing;
         const food: FoodItem = { id: makeId('ai_food'), name: ingredient.name, brand: ingredient.brand || undefined, serving: { unit: ingredient.unit, amount: 1, gramsPerUnit: ingredient.gramsPerUnit }, nutrition: { calories: ingredient.caloriesPer100g, protein: ingredient.proteinPer100g, carbs: ingredient.carbsPer100g, fat: ingredient.fatPer100g }, tags: ['ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: ingredient.confidence } };
         next = upsertFood(next, food);
-        operations.push(operation('food', { clientId: food.id, name: food.name, brand: food.brand, serving: food.serving, nutrition: food.nutrition }));
+        appliedChanges += 1;
         return food;
       };
       const addEntry = (food: FoodItem, quantity: number, entryDate: string, eatenAt: string, note: string) => {
         const id = makeId('entry'); const mealType = mealForTime(eatenAt);
-        const payload: FoodEntryInput = { clientId: id, date: entryDate, eatenAt, mealType, foodId: food.id, portion: { foodId: food.id, quantity, unit: food.serving.unit }, note };
-        next = upsertEntry(next, { id, date: entryDate, eatenAt, mealType, foodId: food.id, portion: payload.portion, note, enteredAt: timestamp, source: { source: 'llm', confidence: 1 } });
-        operations.push(operation('entry', payload));
+        const portion = { foodId: food.id, quantity, unit: food.serving.unit };
+        next = upsertEntry(next, { id, date: entryDate, eatenAt, mealType, foodId: food.id, portion, note, enteredAt: timestamp, source: { source: 'llm', confidence: 1 } });
+        appliedChanges += 1;
       };
       for (const action of assistantPlan.actions) {
         const actionDate = action.date || date; const actionTime = action.time || currentTime();
@@ -386,37 +348,36 @@ function FitnessApp() {
           const dish: FoodItem = { id: foodId, name: action.name || 'AI dish', serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / servings }, nutrition: calculation.per100g, tags: ['recipe', 'custom-dish', 'ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: action.confidence } };
           const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, reviewStatus: 'ai_estimated', sourceName: 'Groq ingredient estimate', createdAt: timestamp, updatedAt: timestamp };
           next = upsertRecipe(upsertFood(next, dish), recipe);
-          operations.push(operation('food', { clientId: dish.id, name: dish.name, serving: dish.serving, nutrition: dish.nutrition }));
+          appliedChanges += 1;
           if (action.type === 'create_recipe_and_log') addEntry(dish, action.quantity || 1, actionDate, actionTime, 'Created and logged by the AI assistant.');
         } else if (action.type === 'log_weight' && action.value) {
-          const id = next.weights.find((item) => item.date === actionDate)?.id || makeId('weight'); const payload: WeightInput = { clientId: id, date: actionDate, weightKg: action.value };
-          next = upsertWeight(next, { id, date: actionDate, weightKg: action.value, enteredAt: timestamp }); operations.push(operation('weight', payload));
+          const id = next.weights.find((item) => item.date === actionDate)?.id || makeId('weight');
+          next = upsertWeight(next, { id, date: actionDate, weightKg: action.value, enteredAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'log_activity' && action.name && action.durationMinutes) {
           const id = makeId('activity'); const calories = action.calories ?? estimateActivityCalories(action.name, action.durationMinutes, next.profile?.bodyWeightKg || 75).calories;
-          const payload: ActivityInput = { clientId: id, date: actionDate, name: action.name, type: action.name.toLowerCase(), durationMinutes: action.durationMinutes, caloriesEstimated: calories };
-          next = upsertActivity(next, { id, date: actionDate, name: action.name, type: payload.type, durationMinutes: action.durationMinutes, caloriesEstimated: calories, source: 'manual', createdAt: timestamp }); operations.push(operation('activity', payload));
+          next = upsertActivity(next, { id, date: actionDate, name: action.name, type: action.name.toLowerCase(), durationMinutes: action.durationMinutes, caloriesEstimated: calories, source: 'manual', createdAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'change_entry_time' && action.targetId) {
           const entry = next.entries.find((item) => item.id === action.targetId); if (!entry) continue;
           const updated = { ...entry, date: actionDate || entry.date, eatenAt: actionTime, mealType: mealForTime(actionTime) };
-          next = upsertEntry(next, updated); operations.push(operation('entry', { clientId: updated.id, date: updated.date, eatenAt: updated.eatenAt, mealType: updated.mealType, foodId: updated.foodId, portion: updated.portion, note: updated.note }));
-        } else if (action.type === 'delete_entry' && action.targetId) { next = removeEntry(next, action.targetId); operations.push(operation('deleteEntry', { id: action.targetId })); }
-        else if (action.type === 'delete_weight' && action.targetId) { next = removeWeight(next, action.targetId); operations.push(operation('deleteWeight', { id: action.targetId })); }
-        else if (action.type === 'delete_activity' && action.targetId) { next = removeActivity(next, action.targetId); operations.push(operation('deleteActivity', { id: action.targetId })); }
+          next = upsertEntry(next, updated); appliedChanges += 1;
+        } else if (action.type === 'delete_entry' && action.targetId) { next = removeEntry(next, action.targetId); appliedChanges += 1; }
+        else if (action.type === 'delete_weight' && action.targetId) { next = removeWeight(next, action.targetId); appliedChanges += 1; }
+        else if (action.type === 'delete_activity' && action.targetId) { next = removeActivity(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'set_goal' && action.calories != null && action.protein != null && action.carbs != null && action.fat != null) {
-          const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); operations.push(operation('goal', goal));
+          const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); appliedChanges += 1;
         } else if (action.type === 'update_profile' && next.profile) {
           const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, profilePhotoUri: current.profilePhotoUri, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
-          next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); operations.push(operation('profile', input));
+          next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'create_plan_from_day' && action.name) {
-          const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); operations.push(operation('plan', built.payload));
+          const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); appliedChanges += 1;
         } else if (action.type === 'apply_plan' && action.targetId) {
           const plan = next.plans.find((item) => item.id === action.targetId); if (!plan) continue;
           const entries = instantiatePlan({ plan, date: actionDate, now: timestamp, makeEntryId: () => makeId('entry') });
-          for (const entry of entries) { next = upsertEntry(next, entry); operations.push(operation('entry', { clientId: entry.id, date: entry.date, eatenAt: entry.eatenAt, mealType: entry.mealType, foodId: entry.foodId, portion: entry.portion, note: entry.note })); }
-        } else if (action.type === 'delete_plan' && action.targetId) { next = removePlan(next, action.targetId); operations.push(operation('deletePlan', { id: action.targetId })); }
+          for (const entry of entries) { next = upsertEntry(next, entry); appliedChanges += 1; }
+        } else if (action.type === 'delete_plan' && action.targetId) { next = removePlan(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'navigate' && action.destination) destination = action.destination;
       }
-      if (operations.length) await commit(next, operations, `Assistant applied ${operations.length} change${operations.length === 1 ? '' : 's'}`);
+      if (appliedChanges) await commit(next, `Assistant applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'}`);
       if (destination) changeTab(destination);
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: `Applied ${assistantPlan.actions.length} approved action${assistantPlan.actions.length === 1 ? '' : 's'}.`, createdAt: now() }]);
       setAssistantPlan(null);
@@ -429,7 +390,7 @@ function FitnessApp() {
     const timestamp = now();
     const profile: UserProfile = { ...state.profile, ...input, id: state.profile?.id || makeId('profile'), createdAt: state.profile?.createdAt || timestamp, updatedAt: timestamp };
     const goal = recommendDailyGoal(profile, date);
-    await commit(upsertGoal(setProfile(state, profile), goal), [operation('profile', input)], `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
+    await commit(upsertGoal(setProfile(state, profile), goal), `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
     await personalizeProgram(profile);
   }
 
@@ -437,15 +398,7 @@ function FitnessApp() {
     if (!state.profile) return;
     const timestamp = now();
     const profile = { ...state.profile, profilePhotoUri, updatedAt: timestamp };
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = profile;
-    await commit(setProfile(state, profile), [operation('profile', input)], profilePhotoUri ? 'Profile photo updated' : 'Profile photo removed');
-  }
-
-  async function updateAgentConnection(input: { baseUrl: string; pairingToken: string }) {
-    const saved = await saveAgentConnection(input);
-    setAgentConnection(saved);
-    setStatus(`PC agent link saved for ${saved.baseUrl}.`);
-    await refreshIntegrationStatus();
+    await commit(setProfile(state, profile), profilePhotoUri ? 'Profile photo updated' : 'Profile photo removed');
   }
 
   async function setLocalPin(pin: string | null) {
@@ -474,7 +427,7 @@ function FitnessApp() {
     const profile: UserProfile = { ...input, onboardingComplete: true, id: makeId('profile'), createdAt: timestamp, updatedAt: timestamp };
     const base = includeDemo ? withDemoData(state, date, profile) : state;
     const goal = recommendDailyGoal(profile, date);
-    await commit(upsertGoal(setProfile(base, profile), goal), [operation('profile', input)], includeDemo ? 'Profile ready with 60 days of demo history' : 'Profile and targets ready');
+    await commit(upsertGoal(setProfile(base, profile), goal), includeDemo ? 'Profile ready with 60 days of demo history' : 'Profile and targets ready');
     await personalizeProgram(profile);
   }
 
@@ -486,7 +439,7 @@ function FitnessApp() {
       setState((current) => ({ ...current, nutritionProgram: program }));
       setStatus(response.review.aiGenerated ? 'Personalized food structure created with locked local targets.' : 'Safe local food structure created; AI personalization was unavailable.');
     } catch {
-      setStatus('Profile saved. The PC agent was unavailable, so the existing local targets remain active.');
+      setStatus('Profile saved. Your local targets remain active while the hosted AI is unavailable.');
     }
   }
 
@@ -512,7 +465,7 @@ function FitnessApp() {
       setState((current) => ({ ...current, nutritionProgram: { createdAt: now(), profileUpdatedAt: state.profile!.updatedAt, ...review.review } }));
       setStatus(review.review.aiGenerated ? 'Food structure refreshed by Groq without changing the safe targets.' : 'Local food structure refreshed; Groq was unavailable.');
     } catch {
-      setStatus('PC advisor unavailable. Your deterministic calorie target remains active.');
+      setStatus('Hosted AI is unavailable. Your deterministic calorie target remains active.');
     }
   }
 
@@ -526,7 +479,7 @@ function FitnessApp() {
     const entries = state.entries.filter((entry) => entry.date === date);
     const timestamp = now();
     const built = buildPlanFromDay({ id: makeId('plan'), name, description, entries, now: timestamp, makeItemId: () => makeId('plan_item') });
-    await commit(upsertPlan(state, built.plan), [operation('plan', built.payload)], `${name} saved as a food plan`);
+    await commit(upsertPlan(state, built.plan), `${name} saved as a food plan`);
   }
 
   async function createRecipe(input: RecipeInput) {
@@ -540,8 +493,7 @@ function FitnessApp() {
       tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
     };
     const recipe: Recipe = { id: recipeId, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, foodId, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, createdAt: timestamp, updatedAt: timestamp };
-    const payload: CustomFoodInput = { clientId: foodId, name: food.name, serving: food.serving, nutrition: food.nutrition };
-    await commit(upsertRecipe(upsertFood(state, food), recipe), [operation('food', payload)], `${food.name} saved as a reusable dish`);
+    await commit(upsertRecipe(upsertFood(state, food), recipe), `${food.name} saved as a reusable dish`);
     return food;
   }
 
@@ -556,83 +508,41 @@ function FitnessApp() {
     const timestamp = now();
     const entries = instantiatePlan({ plan, date, now: timestamp, makeEntryId: () => makeId('entry') });
     let next = state;
-    const operations: PendingOperation[] = [];
     for (const entry of entries) {
       next = upsertEntry(next, entry);
-      const payload: FoodEntryInput = { clientId: entry.id, date, eatenAt: entry.eatenAt, mealType: entry.mealType, foodId: entry.foodId, portion: entry.portion, note: entry.note };
-      operations.push(operation('entry', payload));
     }
-    await commit(next, operations, `${plan.name} added to ${date}`);
+    await commit(next, `${plan.name} added to ${date}`);
     changeTab('today');
   }
 
   function confirmDelete(label: string, onConfirm: () => void) {
-    Alert.alert(`Delete ${label}?`, 'This will also be removed from the PC when synchronization is available.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onConfirm }]);
+    Alert.alert(`Delete ${label}?`, 'This will be removed from this device.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onConfirm }]);
   }
 
   function deleteEntry(id: string) {
-    confirmDelete('food entry', () => void commit(removeEntry(state, id), [operation('deleteEntry', { id })], 'Food entry deleted'));
+    confirmDelete('food entry', () => void commit(removeEntry(state, id), 'Food entry deleted'));
   }
 
   function deleteWeight(id: string) {
-    confirmDelete('weight log', () => void commit(removeWeight(state, id), [operation('deleteWeight', { id })], 'Weight log deleted'));
+    confirmDelete('weight log', () => void commit(removeWeight(state, id), 'Weight log deleted'));
   }
 
   function deleteActivity(id: string) {
-    confirmDelete('activity', () => void commit(removeActivity(state, id), [operation('deleteActivity', { id })], 'Activity deleted'));
+    confirmDelete('activity', () => void commit(removeActivity(state, id), 'Activity deleted'));
   }
 
   function deletePlan(id: string) {
-    confirmDelete('food plan', () => void commit(removePlan(state, id), [operation('deletePlan', { id })], 'Food plan deleted'));
-  }
-
-  async function syncAll() {
-    setStatus('Synchronizing local changes and history...');
-    try {
-      const pushed = await flushPendingOperations(state);
-      const pulled = await pullAllFromAgent(pushed.state);
-      setState(pulled);
-      setStatus(`Sync complete. ${pushed.synced} queued change(s) sent.`);
-    } catch {
-      setStatus(`PC agent unavailable. ${state.pendingOperations.length} change(s) remain safely stored on this device.`);
-    }
+    confirmDelete('food plan', () => void commit(removePlan(state, id), 'Food plan deleted'));
   }
 
   async function refreshIntegrationStatus() {
     try {
-      const [stravaResult, audioResult, agentResult] = await Promise.all([getStravaStatus(), audioStatus(), agentStatus()]);
-      setStrava(stravaResult);
+      const [audioResult, agentResult] = await Promise.all([audioStatus(), agentStatus()]);
       setAudioConfigured(audioResult.configured);
       setAppAgentEnabled(agentResult.appAgent.enabled);
     } catch {
-      setStrava(null);
       setAudioConfigured(null);
       setAppAgentEnabled(null);
-    }
-  }
-
-  async function connectStrava() {
-    try {
-      const url = await getStravaAuthorizationUrl();
-      await Linking.openURL(url);
-      setStatus('Complete authorization in the browser, return to the app, then tap Refresh integration status.');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not start Strava authorization.');
-    }
-  }
-
-  async function importStrava() {
-    setStatus('Importing recent Strava activities...');
-    try {
-      const after = shiftDate(today(), -90);
-      const result = await syncStrava(after);
-      let next = state;
-      for (const activity of result.activities) next = upsertActivity(next, activity);
-      setState(next);
-      setStatus(`${result.imported} Strava activities imported or refreshed.`);
-      await refreshIntegrationStatus();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Strava synchronization failed.');
     }
   }
 
@@ -655,12 +565,12 @@ function FitnessApp() {
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
 
   let screen: React.ReactNode;
-  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} onSync={syncAll} />;
+  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} />;
   else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} review={goalReview} onReview={() => void reviewCurrentGoal()} onApplyAdaptive={(value) => void applyAdaptiveTdee(value)} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} agentConnection={agentConnection} onSaveAgentConnection={updateAgentConnection} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

@@ -1,74 +1,31 @@
-import {
-  ActivityEntry,
-  ActivityInput,
-  AgentActionPlan,
-  AssistantPlan,
-  BodyMetricLog,
-  CustomFoodInput,
-  DailyGoal,
-  FoodEntry,
-  FoodEntryInput,
-  FoodItem,
-  MealPlan,
-  MealPlanInput,
-  ProfileInput,
-  UserProfile,
-  WeightInput
-} from '../types';
 import { File } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import { AssistantPlan, DailyGoal, FoodItem, UserProfile } from '../types';
 
-const DEFAULT_BASE_URL = process.env.EXPO_PUBLIC_AGENT_BASE_URL?.replace(/\/$/, '') || 'http://localhost:8787';
-const DEFAULT_TOKEN = process.env.EXPO_PUBLIC_AGENT_PAIRING_TOKEN || 'dev-local-token';
-const AGENT_BASE_URL_KEY = 'fitness-macro-agent-base-url-v1';
-const AGENT_TOKEN_KEY = 'fitness-macro-agent-token-v1';
+// This public HTTPS address identifies the relay, not a secret. The Groq key stays only in Cloudflare.
+const RELAY_BASE_URL = 'https://fitness-macro-relay.fitness-macro-relay.workers.dev';
+const BUILD_ACCESS_TOKEN = process.env.EXPO_PUBLIC_RELAY_ACCESS_TOKEN?.trim() || '';
 
-let baseUrl = DEFAULT_BASE_URL;
-let token = DEFAULT_TOKEN;
-
-export interface AgentConnection {
-  baseUrl: string;
-  hasSavedPairingToken: boolean;
+function missingBuildToken(): Error {
+  return new Error('This APK does not include the AI service. Install the latest private test build.');
 }
 
-function normalizeBaseUrl(value: string) {
-  const normalized = value.trim().replace(/\/$/, '');
-  if (!/^https?:\/\//i.test(normalized)) throw new Error('Use a complete address, for example http://192.168.18.113:8787');
-  return normalized;
+function friendlyError(status: number, body: string): Error {
+  if (status === 401) return missingBuildToken();
+  if (status === 429) return new Error('The free AI service is temporarily at its limit. Please try again later.');
+  if (status === 504) return new Error('The AI service took too long. Please try again.');
+  if (body.includes('food_not_found')) return new Error('No nutrition data was found for that barcode.');
+  return new Error('The AI service is temporarily unavailable. Please try again.');
 }
 
-export async function loadAgentConnection(): Promise<AgentConnection> {
-  const [savedUrl, savedToken] = await Promise.all([AsyncStorage.getItem(AGENT_BASE_URL_KEY), SecureStore.getItemAsync(AGENT_TOKEN_KEY)]);
-  if (savedUrl) baseUrl = normalizeBaseUrl(savedUrl);
-  if (savedToken) token = savedToken;
-  return { baseUrl, hasSavedPairingToken: Boolean(savedToken) };
-}
-
-export async function saveAgentConnection(next: { baseUrl: string; pairingToken: string }): Promise<AgentConnection> {
-  const normalizedUrl = normalizeBaseUrl(next.baseUrl);
-  const requestedToken = next.pairingToken.trim();
-  const savedToken = requestedToken ? null : await SecureStore.getItemAsync(AGENT_TOKEN_KEY);
-  const pairingToken = requestedToken || savedToken || (DEFAULT_TOKEN !== 'dev-local-token' ? DEFAULT_TOKEN : '');
-  if (!pairingToken) throw new Error('Enter the pairing token from agent/.env.');
-  await Promise.all([AsyncStorage.setItem(AGENT_BASE_URL_KEY, normalizedUrl), requestedToken ? SecureStore.setItemAsync(AGENT_TOKEN_KEY, pairingToken) : Promise.resolve()]);
-  baseUrl = normalizedUrl;
-  token = pairingToken;
-  return { baseUrl, hasSavedPairingToken: Boolean(requestedToken || savedToken) };
+function headers(contentType = 'application/json'): Record<string, string> {
+  if (!BUILD_ACCESS_TOKEN) throw missingBuildToken();
+  return { 'content-type': contentType, 'x-fitnessmacro-app-token': BUILD_ACCESS_TOKEN };
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-agent-token': token };
-  if (init.headers) {
-    for (const [key, value] of Object.entries(init.headers as Record<string, string>)) headers[key] = String(value);
-  }
-  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Agent returned ${response.status}: ${body}`);
-  }
-  if (response.status === 204) return undefined as T;
+  const response = await fetch(`${RELAY_BASE_URL}${path}`, { ...init, headers: { ...headers(), ...(init.headers as Record<string, string> || {}) } });
+  if (!response.ok) throw friendlyError(response.status, await response.text());
   return await response.json() as T;
 }
 
@@ -79,21 +36,21 @@ export interface SearchFoodResponse {
   cachedCount: number;
 }
 
-export interface StravaStatus {
-  configured: boolean;
-  connected: boolean;
-  athleteId?: number;
-  expiresAt?: number;
-  scope?: string;
-  redirectUri?: string;
-}
-
 export interface ResolveFoodResponse {
   transcript: string;
   candidates: FoodItem[];
   suggestions?: Array<{ foodId: string; quantity: number; unit: string; confidence: number; sourceUrl?: string }>;
   notes: string[];
-  plan?: AgentActionPlan;
+  plan?: {
+    intent: 'log_foods' | 'create_recipe_and_log' | 'clarify';
+    title: string;
+    summary: string;
+    requiresConfirmation: boolean;
+    clarification?: string;
+    dish?: { name: string; servings: number; finalWeightGrams: number };
+    items: Array<{ foodId: string; quantity: number; unit: string; confidence: number }>;
+    log: { date: string; eatenAt: string; quantity: number };
+  };
 }
 
 export interface GoalReviewResponse {
@@ -115,7 +72,7 @@ export async function getGoalRecommendation(profile: UserProfile): Promise<GoalR
   return request('/v1/goals/recommendation', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export async function searchFoods(query: string, limit = 10): Promise<SearchFoodResponse> {
+export async function searchFoods(query: string, limit = 8): Promise<SearchFoodResponse> {
   return request(`/v1/foods/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`);
 }
 
@@ -123,15 +80,8 @@ export async function lookupFoodByBarcode(code: string): Promise<{ item: FoodIte
   return request(`/v1/foods/barcode/${encodeURIComponent(code.trim())}`);
 }
 
-export async function createCustomFood(payload: CustomFoodInput) {
-  return request<{ item: FoodItem }>('/v1/foods/custom', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function resolveTranscript(transcript: string, defaultDate: string, defaultTime?: string, context?: unknown) {
-  return request<ResolveFoodResponse>('/v1/agent/command', {
-    method: 'POST',
-    body: JSON.stringify({ transcript, defaultDate, defaultTime, context })
-  });
+export async function resolveTranscript(transcript: string, defaultDate: string, defaultTime?: string, context?: unknown): Promise<ResolveFoodResponse> {
+  return request('/v1/agent/command', { method: 'POST', body: JSON.stringify({ transcript, defaultDate, defaultTime, context }) });
 }
 
 export async function planAssistantCommand(command: string, context: unknown): Promise<AssistantPlan> {
@@ -139,20 +89,13 @@ export async function planAssistantCommand(command: string, context: unknown): P
 }
 
 export async function transcribeRecording(uri: string): Promise<{ text: string; engine: string; retained: boolean }> {
+  if (!BUILD_ACCESS_TOKEN) throw missingBuildToken();
   const audio = new File(uri);
   if (!audio.exists || audio.size <= 0) throw new Error('The phone created an empty recording. Please record again.');
   const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'm4a';
   const mimeType = audio.type || (extension === 'webm' ? 'audio/webm' : extension === 'wav' ? 'audio/wav' : 'audio/mp4');
-  const response = await expoFetch(`${baseUrl}/v1/audio/transcribe`, {
-    method: 'POST',
-    headers: {
-      'content-type': mimeType,
-      'x-agent-token': token,
-      'x-audio-filename': `food-recording.${extension}`
-    },
-    body: audio
-  });
-  if (!response.ok) throw new Error(`Transcription unavailable (${response.status}): ${await response.text()}`);
+  const response = await expoFetch(`${RELAY_BASE_URL}/v1/audio/transcribe`, { method: 'POST', headers: { ...headers(mimeType), 'x-audio-filename': `food-recording.${extension}` }, body: audio });
+  if (!response.ok) throw friendlyError(response.status, await response.text());
   return await response.json() as { text: string; engine: string; retained: boolean };
 }
 
@@ -165,108 +108,4 @@ export async function agentStatus(): Promise<{
   foodAgent: { enabled: boolean; provider: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
 }> {
   return request('/v1/agent/status');
-}
-
-export async function getStravaStatus(): Promise<StravaStatus> {
-  return request('/v1/integrations/strava/status');
-}
-
-export async function getStravaAuthorizationUrl(): Promise<string> {
-  const response = await request<{ url: string }>('/v1/integrations/strava/authorize-url');
-  return response.url;
-}
-
-export async function syncStrava(after: string): Promise<{ imported: number; activities: ActivityEntry[] }> {
-  return request('/v1/integrations/strava/sync', { method: 'POST', body: JSON.stringify({ after }) });
-}
-
-export async function upsertEntry(payload: FoodEntryInput) {
-  return request<{ item: FoodEntry }>('/v1/entries', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function logWeight(payload: WeightInput) {
-  return request<{ item: BodyMetricLog }>('/v1/weights', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function logActivity(payload: ActivityInput) {
-  return request<{ item: ActivityEntry }>('/v1/activities', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function saveProfile(payload: ProfileInput) {
-  return request<{ profile: UserProfile; recommendedGoal: DailyGoal; bmr: number; tdee: number }>('/v1/profile', {
-    method: 'PUT',
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function saveGoal(payload: DailyGoal) {
-  return request<{ item: DailyGoal }>(`/v1/goals/${payload.date}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function listEntriesForDate(date: string): Promise<FoodEntry[]> {
-  return request(`/v1/entries?date=${encodeURIComponent(date)}`);
-}
-
-export async function listAllEntries(): Promise<FoodEntry[]> {
-  return request('/v1/entries');
-}
-
-export async function listWeights(from?: string, to?: string): Promise<BodyMetricLog[]> {
-  const params = new URLSearchParams();
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  const query = params.toString();
-  return request(`/v1/weights${query ? `?${query}` : ''}`);
-}
-
-export async function listActivities(from?: string, to?: string): Promise<ActivityEntry[]> {
-  const params = new URLSearchParams();
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  const query = params.toString();
-  return request(`/v1/activities${query ? `?${query}` : ''}`);
-}
-
-export async function listGoals(from?: string, to?: string): Promise<DailyGoal[]> {
-  const params = new URLSearchParams();
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  const query = params.toString();
-  return request(`/v1/goals${query ? `?${query}` : ''}`);
-}
-
-export async function saveMealPlan(payload: MealPlanInput) {
-  return request<{ item: MealPlan }>('/v1/plans', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function listPlans(): Promise<MealPlan[]> {
-  return request('/v1/plans');
-}
-
-export async function deleteEntry(id: string): Promise<void> {
-  return deleteRequest(`/v1/entries/${encodeURIComponent(id)}`);
-}
-
-export async function deleteWeight(id: string): Promise<void> {
-  return deleteRequest(`/v1/weights/${encodeURIComponent(id)}`);
-}
-
-export async function deleteActivity(id: string): Promise<void> {
-  return deleteRequest(`/v1/activities/${encodeURIComponent(id)}`);
-}
-
-export async function deletePlan(id: string): Promise<void> {
-  return deleteRequest(`/v1/plans/${encodeURIComponent(id)}`);
-}
-
-async function deleteRequest(path: string): Promise<void> {
-  try {
-    await request<void>(path, { method: 'DELETE' });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) return;
-    throw error;
-  }
 }

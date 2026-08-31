@@ -224,21 +224,8 @@ export type MealPlanInput = Pick<MealPlan, 'name' | 'description'> & {
   items: Array<Omit<MealPlanItem, 'id'> & { clientId: string }>;
 };
 
-export type PendingOperation =
-  | { id: string; kind: 'food'; payload: CustomFoodInput; createdAt: string }
-  | { id: string; kind: 'entry'; payload: FoodEntryInput; createdAt: string }
-  | { id: string; kind: 'weight'; payload: WeightInput; createdAt: string }
-  | { id: string; kind: 'activity'; payload: ActivityInput; createdAt: string }
-  | { id: string; kind: 'profile'; payload: ProfileInput; createdAt: string }
-  | { id: string; kind: 'goal'; payload: DailyGoal; createdAt: string }
-  | { id: string; kind: 'plan'; payload: MealPlanInput; createdAt: string }
-  | { id: string; kind: 'deleteEntry'; payload: { id: string }; createdAt: string }
-  | { id: string; kind: 'deleteWeight'; payload: { id: string }; createdAt: string }
-  | { id: string; kind: 'deleteActivity'; payload: { id: string }; createdAt: string }
-  | { id: string; kind: 'deletePlan'; payload: { id: string }; createdAt: string };
-
 export interface AppState {
-  version: 6;
+  version: 7;
   profile?: UserProfile;
   foods: FoodItem[];
   entries: FoodEntry[];
@@ -248,6 +235,4 @@ export interface AppState {
   plans: MealPlan[];
   recipes: Recipe[];
   nutritionProgram?: NutritionProgram;
-  pendingOperations: PendingOperation[];
-  lastSyncedAt?: string;
 }

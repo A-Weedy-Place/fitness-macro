@@ -24,8 +24,9 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 - No PC hop, LAN pairing, desktop process, PC IP, Codex CLI, or desktop dependency in the target product.
 - Never embed, obfuscate, or hash a usable Groq key into the APK. A hash cannot call Groq; a bundled secret can be extracted. The private relay keeps the key server-side, as normal consumer apps do.
-- Initial no-cost host: Cloudflare Worker. Workers Free currently allows 100,000 requests/day and encrypted Worker secrets; it is appropriate only as a thin proxy. The Groq Free plan remains the model-cost limit. Official sources: [pricing](https://developers.cloudflare.com/workers/platform/pricing/) and [secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
-- Before public distribution, add real user/device authentication and rate limits to the relay. Private owner testing must still keep the Groq key off-device.
+- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. The Worker relays only required AI requests and Open Food Facts lookups, and stores no diary, profile, recipe, or raw-audio data.
+- Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists GPT-OSS 120B at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
+- The preview APK has a separate rotatable relay access token. It is not the Groq key, but it is extractable from an APK and is only an owner-test safeguard. Proper account/device authentication and durable global rate limits are required before public distribution.
 
 ### Required delivery rhythm
 
@@ -37,9 +38,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 ### Migration state
 
-- Existing Express `agent/`, `agentClient`, PC sync queue, PC-agent UI, pairing token, and LAN setup are deprecated migration code. Do not extend them.
-- Keep the old PC path only until the Cloudflare relay passes its focused APK test, then remove the obsolete path completely instead of maintaining two architectures.
-- Codex CLI execution/fallback, local Whisper/Python service, provider switching, and paid Groq browser/search tools are permanently removed.
+- The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archive and is not used at runtime.
+- `mobile/src/services/agentClient.ts` now calls the Worker directly. Mobile state is schema **7** with no remote sync queue.
+- `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
+
+### Standalone relay validation — 2026-08-31
+
+- **You → Connections** shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains optional and free; Strava is a later secure-hosted stage.
+- Android clear-text traffic is disabled because AI/reference traffic uses HTTPS. The Worker gives the app a 60-request/hour per-warm-isolate cap, a 6,000-character local context ceiling, and a 1,000-token GPT-OSS response cap.
+- Validation: relay TypeScript, mobile TypeScript, and 12 local tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call hit Groq’s expected free-tier `429`; normal personal use should avoid rapid bursts.
 
 ## Account and Android UI checkpoint - 2026-08-31
 

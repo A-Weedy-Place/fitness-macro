@@ -9,17 +9,15 @@ import { buildDailySeries, latestWeightByDate } from '../logic/analytics';
 import { weeklyChangeForGoal } from '../logic/goals';
 import { cmToFeetInches, feetInchesToCm, kgToLb, lbToKg } from '../logic/units';
 import { activeTheme as loadedTheme, AppThemeName, colors, themeOptions } from '../theme';
-import { AgentConnection, StravaStatus } from '../services/agentClient';
 import { HealthConnectStatus } from '../services/healthConnect';
 
 type Panel = 'profile' | 'appearance' | 'connections' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, strava, healthConnect, audioConfigured, appAgentEnabled, agentConnection, onSaveAgentConnection, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, onOpenTab, pinEnabled, onSetLocalPin, onSync, onLoadDemo, onExport, onImport, onConnectStrava, onSyncStrava, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
-  state: AppState; date: string; status: string; strava: StravaStatus | null; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
-  agentConnection: AgentConnection; onSaveAgentConnection: (input: { baseUrl: string; pairingToken: string }) => Promise<void>;
+export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, onOpenTab, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
+  state: AppState; date: string; status: string; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
   activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>; onOpenTab: (tab: TabKey) => void;
-  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onSync: () => void; onLoadDemo: () => void; onExport: () => string; onImport: (text: string) => void;
-  onConnectStrava: () => void; onSyncStrava: () => void; onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
+  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => string; onImport: (text: string) => void;
+  onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
 }) {
   const profile = state.profile;
   const initialHeight = profile?.heightCm || 175;
@@ -43,8 +41,6 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
   const [showRestore, setShowRestore] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [agentUrl, setAgentUrl] = useState(agentConnection.baseUrl);
-  const [agentToken, setAgentToken] = useState('');
 
   useEffect(() => {
     if (!profile) return;
@@ -53,8 +49,6 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
     const preferredWeight = profile.preferredWeightUnit || 'kg';
     setName(profile.displayName || ''); setSex(profile.sex); setAge(String(profile.ageYears)); setHeightUnit(preferredHeight); setHeight(String(profile.heightCm)); setFeet(String(imperial.feet)); setInches(String(imperial.inches)); setWeightUnit(preferredWeight); setWeight(String(preferredWeight === 'lb' ? kgToLb(profile.bodyWeightKg).toFixed(1) : profile.bodyWeightKg)); setTarget(String(preferredWeight === 'lb' && profile.targetWeightKg ? kgToLb(profile.targetWeightKg).toFixed(1) : profile.targetWeightKg || '')); setFactor(String(profile.activityFactor)); setMode(profile.goalMode === 'lose' || profile.goalMode === 'gain' ? profile.goalMode : 'maintain'); setIntensity(profile.goalIntensity || 'moderate'); setTargetDate(profile.targetDate || date);
   }, [profile?.updatedAt, date]);
-
-  useEffect(() => { setAgentUrl(agentConnection.baseUrl); }, [agentConnection.baseUrl]);
 
   const year = useMemo(() => {
     const series = buildDailySeries({ endDate: date, days: 365, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
@@ -114,20 +108,10 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
     await onSetLocalPin(pin); setPin(''); setConfirmPin(''); setPanel(null);
   }
 
-  async function saveAgentLink() {
-    try {
-      await onSaveAgentConnection({ baseUrl: agentUrl, pairingToken: agentToken });
-      setAgentToken('');
-      Alert.alert('PC agent linked', 'The phone can now use this PC for voice transcription and food actions while both devices are on the same trusted network.');
-    } catch (error) {
-      Alert.alert('Could not save PC agent link', error instanceof Error ? error.message : 'Check the address and pairing token, then try again.');
-    }
-  }
-
   function displayWeight(value?: number) { if (value == null) return 'No check-in'; return profile?.preferredWeightUnit === 'lb' ? `${kgToLb(value).toFixed(1)} lb` : `${value.toFixed(1)} kg`; }
   const goalLabel = profile?.goalMode === 'lose' ? 'Lose weight' : profile?.goalMode === 'gain' ? 'Build weight / muscle' : 'Maintain weight';
   const healthLabel = healthConnect?.permissionGranted ? 'Connected' : healthConnect?.developmentBuildRequired ? 'Needs APK build' : healthConnect?.available ? 'Ready to connect' : 'Checking phone';
-  const voiceLabel = audioConfigured ? 'Ready via PC agent' : audioConfigured === false ? 'Needs Groq key' : 'Checking';
+  const voiceLabel = audioConfigured ? 'Ready' : audioConfigured === false ? 'Service needs attention' : 'Checking';
   const avatar = <Pressable onPress={() => void choosePhoto()} accessibilityRole="button" accessibilityLabel="Change profile photo" style={styles.avatarButton}>
     {profile?.profilePhotoUri ? <Image source={{ uri: profile.profilePhotoUri }} style={styles.avatarImage} /> : <View style={styles.avatarFallback}><Ionicons name="person" size={28} color={colors.white} /></View>}
     <View style={styles.camera}><Ionicons name="camera" size={12} color={colors.white} /></View>
@@ -144,8 +128,8 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
       <SettingsGroup title="Account"><SettingsRow icon="person-outline" title="Profile & measurements" detail="Name, body details, units, and goal pace" onPress={() => setPanel('profile')} /><SettingsRow icon="flag-outline" title="Goals & daily plan" detail="See your targets and recommended plan" onPress={() => onOpenTab('plans')} /><SettingsRow icon="stats-chart-outline" title="Progress & statistics" detail="Weight, intake, and activity trends" onPress={() => onOpenTab('trends')} last /></SettingsGroup>
       <SettingsGroup title="Preferences"><SettingsRow icon="color-palette-outline" title="Appearance & display" detail={themeOptions.find((item) => item.key === activeTheme)?.label || 'Theme'} onPress={() => setPanel('appearance')} /><SettingsRow icon="shield-checkmark-outline" title="Local app lock" detail={pinEnabled ? 'PIN enabled' : 'No PIN set'} onPress={() => setPanel('security')} last /></SettingsGroup>
       <SettingsGroup title="Services"><SettingsRow icon="link-outline" title="Connections" detail={`Voice: ${voiceLabel} · Health: ${healthLabel}`} onPress={() => setPanel('connections')} last /></SettingsGroup>
-      <SettingsGroup title="Your data"><SettingsRow icon="cloud-download-outline" title="Backup, restore & sync" detail={state.pendingOperations.length ? `${state.pendingOperations.length} change(s) waiting for the PC` : 'Local data is synchronized'} onPress={() => setPanel('data')} last /></SettingsGroup>
-      <Text style={styles.footer}>LOCAL-FIRST · SCHEMA 6</Text>
+      <SettingsGroup title="Your data"><SettingsRow icon="cloud-download-outline" title="Backup & restore" detail="Your diary stays on this device" onPress={() => setPanel('data')} last /></SettingsGroup>
+      <Text style={styles.footer}>LOCAL-FIRST · SCHEMA 7</Text>
     </> : null}
 
     {panel === 'profile' ? <>
@@ -159,11 +143,11 @@ export function ProfileScreen({ state, date, status, strava, healthConnect, audi
 
     {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Changing a theme reloads the app once so every screen updates together.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>FitnessMacro follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
 
-    {panel === 'connections' ? <><SectionTitle title="Connections" detail="only enable what you use" /><Card><Text style={styles.rowTitle}>PC agent link</Text><Text style={styles.systemDetail}>Use this phone’s current PC Wi-Fi address. It is saved on the phone, so changing networks never requires rebuilding the APK.</Text><Field label="PC agent address" value={agentUrl} onChangeText={setAgentUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="http://192.168.18.113:8787" /><Field label={agentConnection.hasSavedPairingToken ? 'Pairing token (leave blank to keep saved token)' : 'Pairing token from agent/.env'} value={agentToken} onChangeText={setAgentToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder={agentConnection.hasSavedPairingToken ? 'Stored securely on this phone' : 'Enter pairing token'} /><Button label="Save PC agent link" compact tone="secondary" onPress={() => void saveAgentLink()} /></Card><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={audioConfigured ? 'Groq Whisper transcription and Groq planner are ready through your PC agent.' : 'Add the free Groq key to agent/.env and keep the PC agent running.'} state={voiceLabel} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Health Connect can share daily weight and exercise calories after you allow it.'} state={healthLabel} /><View style={styles.actions}>{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="secondary" onPress={onOpenHealthSettings} /> : <Button label="Connect Health" compact tone="secondary" onPress={onConnectHealth} />}<Button label="Refresh" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail={strava?.connected ? 'Connected as an optional activity-data fallback.' : strava?.configured ? 'Optional fallback when Health Connect is not used.' : 'Not configured. Health Connect is preferred on Android.'} state={strava?.connected ? 'Connected' : strava?.configured ? 'Ready to connect' : 'Not configured'} />{strava?.connected ? <Button label="Sync Strava API" compact tone="ghost" onPress={onSyncStrava} /> : strava?.configured ? <Button label="Connect Strava fallback" compact tone="ghost" onPress={onConnectStrava} /> : null}<ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation." state={appAgentEnabled ? 'Ready' : 'PC agent unavailable'} /></Card></> : null}
+    {panel === 'connections' ? <><SectionTitle title="Connections" detail="services used by this phone" /><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={audioConfigured ? 'Groq Whisper transcription and Groq planning run through the private HTTPS service. No PC connection or API-key entry is required.' : 'The private AI service is unavailable. Refresh after installing the latest APK.'} state={voiceLabel} /><ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation. Your diary remains on this phone." state={appAgentEnabled ? 'Ready' : 'Checking'} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Health Connect can share daily weight and exercise calories after you allow it.'} state={healthLabel} /><View style={styles.actions}>{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="secondary" onPress={onOpenHealthSettings} /> : <Button label="Connect Health" compact tone="secondary" onPress={onConnectHealth} />}<Button label="Refresh services" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail="Activity import will return after it has its own secure hosted connection." state="Coming later" /></Card></> : null}
 
     {panel === 'security' ? <><SectionTitle title="Local app lock" detail="optional device-only protection" /><Card><Text style={styles.explainer}>A PIN protects the app after it is sent to the background. The PIN is stored in your phone’s encrypted storage, not in a cloud account.</Text>{pinEnabled ? <><Text style={styles.ready}>A local PIN is enabled.</Text><Button label="Remove local PIN" tone="danger" onPress={() => Alert.alert('Remove local PIN?', 'Anyone with this phone will be able to open FitnessMacro.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove PIN', style: 'destructive', onPress: () => void onSetLocalPin(null).then(() => setPanel(null)) }])} /></> : <><Field label="Choose 4–8 digit PIN" value={pin} onChangeText={(value) => setPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Field label="Confirm PIN" value={confirmPin} onChangeText={(value) => setConfirmPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Button label="Enable local PIN" onPress={() => void savePin()} /></>}</Card></> : null}
 
-    {panel === 'data' ? <><SectionTitle title="Backup, restore & sync" detail="you control the data" /><Card><Text style={styles.explainer}>A portable JSON backup includes your profile, recipes, foods, diary, weights, activities, and targets. It never includes credentials or raw audio.</Text><Button label="Share portable backup" onPress={() => void exportBackup()} /><View style={styles.smallGap} /><Button label={showRestore ? 'Hide restore box' : 'Restore backup'} tone="secondary" onPress={() => setShowRestore(!showRestore)} />{showRestore ? <><Field label="Paste complete backup JSON" value={backupText} onChangeText={setBackupText} multiline autoCapitalize="none" /><Button label="Import and replace local data" tone="danger" onPress={() => Alert.alert('Replace local data?', 'The pasted backup will become the active local account.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Import', style: 'destructive', onPress: () => onImport(backupText) }])} /></> : null}<View style={styles.divider} /><Text style={styles.rowTitle}>{state.pendingOperations.length ? `${state.pendingOperations.length} change(s) waiting for the PC` : 'Local changes synchronized'}</Text><Text style={styles.systemDetail}>{status}</Text><Button label="Sync everything with PC" tone="secondary" onPress={onSync} /><View style={styles.smallGap} /><Button label="Load demo history" tone="ghost" onPress={() => Alert.alert('Load demo history?', 'This refreshes 60 days of demonstration records.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Load', onPress: onLoadDemo }])} /></Card></> : null}
+    {panel === 'data' ? <><SectionTitle title="Backup & restore" detail="you control the data" /><Card><Text style={styles.explainer}>A portable JSON backup includes your profile, recipes, foods, diary, weights, activities, and targets. It never includes credentials or raw audio.</Text><Button label="Share portable backup" onPress={() => void exportBackup()} /><View style={styles.smallGap} /><Button label={showRestore ? 'Hide restore box' : 'Restore backup'} tone="secondary" onPress={() => setShowRestore(!showRestore)} />{showRestore ? <><Field label="Paste complete backup JSON" value={backupText} onChangeText={setBackupText} multiline autoCapitalize="none" /><Button label="Import and replace local data" tone="danger" onPress={() => Alert.alert('Replace local data?', 'The pasted backup will become the active local account.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Import', style: 'destructive', onPress: () => onImport(backupText) }])} /></> : null}<View style={styles.divider} /><Text style={styles.rowTitle}>Stored locally on this phone</Text><Text style={styles.systemDetail}>{status}</Text><View style={styles.smallGap} /><Button label="Load demo history" tone="ghost" onPress={() => Alert.alert('Load demo history?', 'This refreshes 60 days of demonstration records.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Load', onPress: onLoadDemo }])} /></Card></> : null}
   </Page>;
 }
 

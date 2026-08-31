@@ -41,14 +41,14 @@ export default {
             compileSdkVersion: 36,
             targetSdkVersion: 36,
             minSdkVersion: 26,
-            usesCleartextTraffic: true
+            usesCleartextTraffic: false
           }
         }
       ],
       [
         'expo-audio',
         {
-          microphonePermission: 'Allow FitnessMacro to record food descriptions for local transcription.'
+          microphonePermission: 'Allow FitnessMacro to record food descriptions for private transcription.'
         }
       ],
       [
