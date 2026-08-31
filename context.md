@@ -1,5 +1,42 @@
 # context.md
 
+## Source of truth: standalone mobile product architecture - 2026-08-31
+
+This section supersedes older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual-mobile-key notes below. Older sections are historical implementation records only.
+
+### Product definition
+
+- **FitnessMacro is a standalone Android nutrition app.** The installed APK owns the user's diary, cookbook, recipes, targets, plans, trends, profile, local app lock, and portable backup. These normal features must work without a PC.
+- The app has internet access. AI features are online by design; the app must remain useful if the internet is unavailable.
+- The user does **not** want Whisper, an LLM, Codex CLI, or another large model packaged on the phone. The app must not ask the user to paste an AI API key.
+- The product uses two Groq-hosted models: `whisper-large-v3-turbo` for speech-to-text and `openai/gpt-oss-120b` for typed food-agent reasoning. The agent reads compact relevant local context, returns confirmation-gated actions, and the mobile app itself applies approved changes to its local database.
+
+### Required production connection
+
+```text
+FitnessMacro APK → private hosted FitnessMacro relay → Groq API
+                                      └→ server-side GROQ_API_KEY secret
+```
+
+- There is no PC hop, PC IP address, LAN pairing token, local background agent, Codex CLI, or desktop dependency in the target architecture.
+- The Groq key must never be embedded, encoded, obfuscated, or hashed inside the APK: a hash cannot call Groq, and any usable embedded secret can be extracted. Normal consumer apps solve this by keeping the key only on their backend.
+- The relay will use a no-cost Cloudflare Worker initially. Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request—sufficient for a thin proxy—and supports encrypted Worker secrets. The Groq free tier remains the model-cost constraint. See the official [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/) and [secrets documentation](https://developers.cloudflare.com/workers/configuration/secrets/).
+- The relay still needs proper user/device authentication before a public release. For the owner's private testing APK, the first relay stage will remain private and rate-limited; it will not put the Groq key in the app.
+
+### Delivery process required by the owner
+
+1. Work on one short, isolated stage only.
+2. Update this file and `obsidian/Fitness App Project Context.md` with the resulting decision and validation.
+3. Run proportionate tests, commit, and push to GitHub.
+4. Produce a new installable APK for that stage.
+5. Give the owner a short test checklist and wait for feedback before starting the next unrelated stage.
+
+### Migration state
+
+- The checked-in `agent/` Express service, `mobile/src/services/agentClient.ts`, mobile sync queue, PC-agent connection form, pairing token, and LAN configuration are **deprecated migration code**. Do not add new functionality to them.
+- Do not delete the PC route until the Cloudflare relay replacement has passed the focused APK test; then delete the complete obsolete path rather than carrying two AI architectures.
+- Already removed and never to be restored: Codex CLI execution/fallback, local Whisper/Python service, multi-provider selection, and any paid Groq browser/search tools.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this section synchronized with `obsidian/Fitness App Project Context.md` whenever the user makes a material product decision or a feature is completed.

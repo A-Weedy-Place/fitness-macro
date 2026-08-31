@@ -4,6 +4,43 @@ project: fitness-macro
 updated: 2026-08-31
 ---
 
+## Source of truth: standalone mobile product architecture - 2026-08-31
+
+> This section supersedes the older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual mobile-key notes below. Those sections are historical records, not the forward plan.
+
+### Product definition
+
+- **FitnessMacro is a standalone Android nutrition app.** The APK owns diary, cookbook, recipes, targets, plans, trends, profile, local lock, and portable backup. Core features must not need a PC.
+- The app has internet. AI features are online, but normal local features remain usable offline.
+- Do not package Whisper, an LLM, Codex CLI, or any large model on the phone. Do not ask the user to enter an AI API key.
+- Use Groq `whisper-large-v3-turbo` for STT and `openai/gpt-oss-120b` for confirmation-gated food-agent plans. The mobile app sends compact relevant local context and applies approved actions to its own database.
+
+### Required production connection
+
+```text
+FitnessMacro APK → private hosted FitnessMacro relay → Groq API
+                                      └→ server-side GROQ_API_KEY secret
+```
+
+- No PC hop, LAN pairing, desktop process, PC IP, Codex CLI, or desktop dependency in the target product.
+- Never embed, obfuscate, or hash a usable Groq key into the APK. A hash cannot call Groq; a bundled secret can be extracted. The private relay keeps the key server-side, as normal consumer apps do.
+- Initial no-cost host: Cloudflare Worker. Workers Free currently allows 100,000 requests/day and encrypted Worker secrets; it is appropriate only as a thin proxy. The Groq Free plan remains the model-cost limit. Official sources: [pricing](https://developers.cloudflare.com/workers/platform/pricing/) and [secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
+- Before public distribution, add real user/device authentication and rate limits to the relay. Private owner testing must still keep the Groq key off-device.
+
+### Required delivery rhythm
+
+1. One short isolated change stage.
+2. Update this note and `context.md`.
+3. Test, commit, and push.
+4. Build an installable APK.
+5. Owner tests with a short checklist before the next unrelated change.
+
+### Migration state
+
+- Existing Express `agent/`, `agentClient`, PC sync queue, PC-agent UI, pairing token, and LAN setup are deprecated migration code. Do not extend them.
+- Keep the old PC path only until the Cloudflare relay passes its focused APK test, then remove the obsolete path completely instead of maintaining two architectures.
+- Codex CLI execution/fallback, local Whisper/Python service, provider switching, and paid Groq browser/search tools are permanently removed.
+
 ## Account and Android UI checkpoint - 2026-08-31
 
 - Keep this note and `context.md` synchronized after every material product decision or completed feature.
