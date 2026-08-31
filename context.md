@@ -55,6 +55,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - **Themes:** release builds use `expo-updates` to restart safely after a palette selection; the former development-only reload path was the reason appearance choices appeared to do nothing in the APK.
 - **Health Connect:** the Android manifest now declares only `READ_WEIGHT`, `READ_ACTIVE_CALORIES_BURNED`, and `READ_TOTAL_CALORIES_BURNED`; the app requests them at runtime, no longer filters records to Strava, and shows the connection result in a dialog. It still requires Android Health Connect support and a device screen lock. It is free and never uses an API key.
 - Deleted the obsolete ignored mobile `.env` that contained a previous PC address/pairing token. No mobile runtime reads any PC URL or pairing variable.
+- Validation before the replacement preview build: `npm run typecheck` passes, **13/13** mobile tests pass (including local-calendar and Monday-week coverage), `expo config` resolves the three Health Connect permissions, `expo-updates` is installed at the Expo SDK-compatible version, and `git diff --check` passes. Preview build `2748e908-771b-4f73-aad9-1e3145942d29` is the intended build from commit `41bfd42`; an accidental duplicate queued build should be ignored/cancelled if EAS exposes it.
 
 ## Account and Android UI checkpoint - 2026-08-31
 
