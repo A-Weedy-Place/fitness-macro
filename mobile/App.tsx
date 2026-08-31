@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, AppState as NativeAppState, DevSettings, LayoutAnimation, Linking, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { NavigationBar } from 'expo-navigation-bar';
+import * as SecureStore from 'expo-secure-store';
 import {
   ActivityEntry,
   ActivityInput,
@@ -55,6 +57,7 @@ import { LibraryScreen } from './src/screens/LibraryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AssistantScreen } from './src/screens/AssistantScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { AccountLockScreen } from './src/screens/AccountLockScreen';
 import { activeTheme, AppThemeName, atmosphere, colors, isDarkTheme, saveAppTheme } from './src/theme';
 import { withDemoData } from './src/logic/demoData';
 import { createPortableBackup, restorePortableBackup } from './src/logic/backup';
@@ -72,8 +75,10 @@ function now() {
   return new Date().toISOString();
 }
 
+const LOCAL_PIN_KEY = 'fitness-macro-local-pin-v1';
+
 export default function App() {
-  return <SafeAreaProvider><FitnessApp /></SafeAreaProvider>;
+  return <SafeAreaProvider><NavigationBar hidden style={isDarkTheme ? 'dark' : 'light'} /><FitnessApp /></SafeAreaProvider>;
 }
 
 function FitnessApp() {
@@ -93,11 +98,26 @@ function FitnessApp() {
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
   const [assistantBusy, setAssistantBusy] = useState(false);
+  const [lockReady, setLockReady] = useState(false);
+  const [pinEnabled, setPinEnabled] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
     void loadState().then((loaded) => {
       setState(loaded);
       setHydrated(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    void SecureStore.getItemAsync(LOCAL_PIN_KEY).then((storedPin) => {
+      setPinEnabled(Boolean(storedPin));
+      setUnlocked(!storedPin);
+      setLockReady(true);
+    }).catch(() => {
+      // Never strand the owner outside their local data if secure storage is unavailable.
+      setUnlocked(true);
+      setLockReady(true);
     });
   }, []);
 
@@ -112,9 +132,12 @@ function FitnessApp() {
   useEffect(() => {
     if (!hydrated) return;
     void refreshHealthConnect(false);
-    const subscription = NativeAppState.addEventListener('change', (next) => { if (next === 'active') void refreshHealthConnect(false); });
+    const subscription = NativeAppState.addEventListener('change', (next) => {
+      if (next === 'active') void refreshHealthConnect(false);
+      else if (pinEnabled) setUnlocked(false);
+    });
     return () => subscription.remove();
-  }, [hydrated]);
+  }, [hydrated, pinEnabled]);
 
   function changeTab(tab: TabKey) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -377,7 +400,7 @@ function FitnessApp() {
         else if (action.type === 'set_goal' && action.calories != null && action.protein != null && action.carbs != null && action.fat != null) {
           const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); operations.push(operation('goal', goal));
         } else if (action.type === 'update_profile' && next.profile) {
-          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
+          const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, profilePhotoUri: current.profilePhotoUri, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
           next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); operations.push(operation('profile', input));
         } else if (action.type === 'create_plan_from_day' && action.name) {
           const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); operations.push(operation('plan', built.payload));
@@ -403,6 +426,35 @@ function FitnessApp() {
     const goal = recommendDailyGoal(profile, date);
     await commit(upsertGoal(setProfile(state, profile), goal), [operation('profile', input)], `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
     await personalizeProgram(profile);
+  }
+
+  async function saveProfilePhoto(profilePhotoUri?: string) {
+    if (!state.profile) return;
+    const timestamp = now();
+    const profile = { ...state.profile, profilePhotoUri, updatedAt: timestamp };
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = profile;
+    await commit(setProfile(state, profile), [operation('profile', input)], profilePhotoUri ? 'Profile photo updated' : 'Profile photo removed');
+  }
+
+  async function setLocalPin(pin: string | null) {
+    if (pin) {
+      await SecureStore.setItemAsync(LOCAL_PIN_KEY, pin);
+      setPinEnabled(true);
+      setUnlocked(true);
+      setStatus('Local app lock enabled. The PIN is stored only in encrypted device storage.');
+      return;
+    }
+    await SecureStore.deleteItemAsync(LOCAL_PIN_KEY);
+    setPinEnabled(false);
+    setUnlocked(true);
+    setStatus('Local app lock removed.');
+  }
+
+  async function unlockLocalPin(pin: string) {
+    const storedPin = await SecureStore.getItemAsync(LOCAL_PIN_KEY);
+    if (!storedPin || storedPin !== pin) return false;
+    setUnlocked(true);
+    return true;
   }
 
   async function completeOnboarding(input: ProfileInput, includeDemo: boolean) {
@@ -586,7 +638,8 @@ function FitnessApp() {
     setQuickLogVisible(true);
   }
 
-  if (!hydrated) return <SafeAreaView style={styles.root} />;
+  if (!hydrated || !lockReady) return <SafeAreaView style={styles.root} />;
+  if (pinEnabled && !unlocked) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><AccountLockScreen onUnlock={unlockLocalPin} /></SafeAreaView>;
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
 
   let screen: React.ReactNode;
@@ -595,7 +648,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} strava={strava} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} onOpenTab={changeTab} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onSync={syncAll} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectStrava={connectStrava} onSyncStrava={importStrava} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

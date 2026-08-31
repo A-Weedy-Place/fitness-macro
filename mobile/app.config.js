@@ -20,6 +20,21 @@ export default {
     plugins: [
       'react-native-health-connect',
       [
+        'expo-navigation-bar',
+        {
+          hidden: true,
+          style: 'dark',
+          enforceContrast: false
+        }
+      ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Allow FitnessMacro to use a profile photo saved on this device.'
+        }
+      ],
+      'expo-secure-store',
+      [
         'expo-build-properties',
         {
           android: {

@@ -1,5 +1,17 @@
 # context.md
 
+## Account and Android UI checkpoint - 2026-08-31
+
+- Keep this section synchronized with `obsidian/Fitness App Project Context.md` whenever the user makes a material product decision or a feature is completed.
+- Android's system navigation bar must start hidden so it cannot cover FitnessMacro's fixed bottom tab bar. Android's normal bottom-edge swipe remains the deliberate way to reveal it temporarily.
+- The app now uses icon-led bottom navigation: Today, Goals, AI, Trends, Food, and You. Text labels remain below the icons for clarity and accessibility.
+- **You** is now a compact account hub rather than a long single form. Its panels separate Profile & measurements, Goals & daily plan, Progress & statistics, Appearance & display, Connections, Local app lock, and Backup/restore/sync.
+- A profile picture can be picked from the phone's library and is stored as a local URI in the local-first profile record. It is useful on the current device; it is not yet a cloud-synced avatar and may need selecting again after moving to a new phone.
+- Optional login for the current local-first product is a device-only 4–8 digit PIN, stored in encrypted Expo SecureStore. It locks on backgrounding and has no subscription, server, email identity, password recovery, or cross-device account semantics. A real email/Google account must be designed with an authenticated backend later; do not imply that this PIN is one.
+- Appearance now offers Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. Brightness intentionally follows the phone's own system controls.
+- Added native Expo dependencies/config for Android navigation-bar control, profile photo picking, and encrypted local PIN storage. These native additions need a rebuilt APK for full realistic testing, though most layout work can still be inspected in Expo Go.
+- Validation after this UI checkpoint: mobile TypeScript check + 12 tests pass; agent build + 8 tests pass.
+
 ## Phone-test product specification checkpoint - 2026-08-30
 
 - Keep this file and `obsidian/Fitness App Project Context.md` updated after material product decisions and completed work so future sessions inherit the real state.

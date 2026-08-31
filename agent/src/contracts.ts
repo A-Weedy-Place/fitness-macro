@@ -116,6 +116,7 @@ export interface SyncEvent {
 export interface UserProfile {
   id: string;
   displayName?: string;
+  profilePhotoUri?: string;
   sex: 'male' | 'female' | 'other';
   ageYears: number;
   heightCm: number;
@@ -248,6 +249,7 @@ export const ActivitySchema = z.object({
 
 export const ProfileSchema = z.object({
   displayName: z.string().min(1).max(80).optional(),
+  profilePhotoUri: z.string().max(2_000).optional(),
   sex: z.enum(['male', 'female', 'other']),
   ageYears: z.number().int().min(13).max(120),
   heightCm: z.number().min(80).max(260),

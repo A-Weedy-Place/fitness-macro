@@ -1,4 +1,5 @@
 import React from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   Pressable,
   ScrollView,
@@ -120,13 +121,15 @@ export function DateSwitcher({ date, isToday, onPrevious, onNext, onToday }: { d
   );
 }
 
-const tabs: Array<{ key: TabKey; label: string; mark: string }> = [
-  { key: 'today', label: 'Today', mark: 'D' },
-  { key: 'plans', label: 'Goals', mark: 'G' },
-  { key: 'assistant', label: 'AI', mark: 'AI' },
-  { key: 'trends', label: 'Trends', mark: 'T' },
-  { key: 'library', label: 'Food', mark: 'F' },
-  { key: 'profile', label: 'You', mark: 'Y' }
+type TabIconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const tabs: Array<{ key: TabKey; label: string; icon: TabIconName }> = [
+  { key: 'today', label: 'Today', icon: 'today-outline' },
+  { key: 'plans', label: 'Goals', icon: 'flag-outline' },
+  { key: 'assistant', label: 'AI', icon: 'sparkles-outline' },
+  { key: 'trends', label: 'Trends', icon: 'stats-chart-outline' },
+  { key: 'library', label: 'Food', icon: 'restaurant-outline' },
+  { key: 'profile', label: 'You', icon: 'person-circle-outline' }
 ];
 
 export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
@@ -135,8 +138,8 @@ export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (ta
       {tabs.map((tab) => {
         const selected = tab.key === active;
         return (
-          <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={styles.tab}>
-            <View style={[styles.tabMark, tab.key === 'assistant' && styles.tabMarkAssistant, selected && styles.tabMarkSelected, selected && tab.key === 'assistant' && styles.tabMarkAssistantSelected]}><Text style={[styles.tabMarkText, selected && styles.tabMarkTextSelected]}>{tab.mark}</Text></View>
+          <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={tab.label}>
+            <View style={[styles.tabMark, tab.key === 'assistant' && styles.tabMarkAssistant, selected && styles.tabMarkSelected, selected && tab.key === 'assistant' && styles.tabMarkAssistantSelected]}><Ionicons name={tab.icon} size={tab.key === 'assistant' ? 19 : 18} color={selected ? colors.white : colors.muted} /></View>
             <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>{tab.label}</Text>
           </Pressable>
         );
@@ -196,8 +199,6 @@ const styles = StyleSheet.create({
   tabMarkSelected: { backgroundColor: colors.ink },
   tabMarkAssistant: { width: 34, height: 34, borderRadius: 17, marginTop: -7, backgroundColor: colors.pineSoft },
   tabMarkAssistantSelected: { backgroundColor: colors.coral },
-  tabMarkText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
-  tabMarkTextSelected: { color: colors.white },
-  tabLabel: { color: colors.muted, fontSize: 9, fontWeight: '800', marginTop: 3 },
+  tabLabel: { color: colors.muted, fontSize: 8, fontWeight: '800', marginTop: 3 },
   tabLabelSelected: { color: colors.ink }
 });

@@ -1,8 +1,20 @@
 ---
 tags: [fitness-app, macronutrients, local-first, roadmap]
 project: fitness-macro
-updated: 2026-08-30
+updated: 2026-08-31
 ---
+
+## Account and Android UI checkpoint - 2026-08-31
+
+- Keep this note and `context.md` synchronized after every material product decision or completed feature.
+- Android navigation must start hidden so it cannot overlay the in-app bottom tabs; the normal bottom-edge swipe is the intentional way to reveal it temporarily.
+- Bottom navigation is now icon-led (Today, Goals, AI, Trends, Food, You) with compact text labels retained for clarity/accessibility.
+- **You** is a compact account hub with separate Profile & measurements, Goals & daily plan, Progress & statistics, Appearance & display, Connections, Local app lock, and Backup/restore/sync panels rather than one long form.
+- A chosen profile image is saved as a local device URI. It is not yet a cloud avatar and may need reselecting after moving devices.
+- Current login scope is deliberately local and free: an optional 4–8 digit PIN in encrypted Expo SecureStore locks the app after backgrounding. It has no cloud identity, email/Google sign-in, recovery, or cross-device behavior. A real account requires a future authenticated backend.
+- Themes: Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. The app follows device brightness rather than changing it.
+- New Expo native dependencies/config cover system navigation-bar hiding, local photo selection, and encrypted PIN storage. Rebuild the APK to test native behavior realistically; Expo Go remains useful for UI iteration.
+- Verification: mobile type-check + 12 tests and agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30
 

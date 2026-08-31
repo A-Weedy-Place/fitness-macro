@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 
-export type AppThemeName = 'warm' | 'neutral' | 'charcoal';
+export type AppThemeName = 'warm' | 'neutral' | 'charcoal' | 'ocean' | 'orchid';
 
 interface ThemeColors {
   paper: string; paperDeep: string; card: string; ink: string; muted: string; faint: string; line: string;
@@ -23,10 +23,22 @@ const charcoal: ThemeColors = {
   pine: '#0B0E0C', pineSoft: '#26372E', coral: '#FF8065', coralSoft: '#40261F', gold: '#F0BF4B', goldSoft: '#3A321E', sky: '#69A5FF', danger: '#FF8A78', white: '#FFFFFF'
 };
 
+const ocean: ThemeColors = {
+  paper: '#EEF6F8', paperDeep: '#DCECEF', card: '#FCFEFF', ink: '#14323B', muted: '#63777B', faint: '#96A9AD', line: '#CBDDE1',
+  pine: '#0D4B5C', pineSoft: '#D9EDF1', coral: '#D96852', coralSoft: '#FAE4DF', gold: '#D9A437', goldSoft: '#FCF1D2', sky: '#317AA0', danger: '#B04B3C', white: '#FFFFFF'
+};
+
+const orchid: ThemeColors = {
+  paper: '#F8F2F8', paperDeep: '#EEE0ED', card: '#FFFDFE', ink: '#302136', muted: '#796A7B', faint: '#A796A9', line: '#E2D4E2',
+  pine: '#4A2D59', pineSoft: '#EEE1F1', coral: '#C95D76', coralSoft: '#F9E0E7', gold: '#C89338', goldSoft: '#FBF0D4', sky: '#596EAE', danger: '#A8425C', white: '#FFFFFF'
+};
+
 export const themeOptions: Array<{ key: AppThemeName; label: string; detail: string }> = [
   { key: 'warm', label: 'Warm Harvest', detail: 'The original cream, forest, coral, and gold palette.' },
   { key: 'neutral', label: 'Clean Neutral', detail: 'The current crisp white and graphite palette.' },
-  { key: 'charcoal', label: 'Charcoal', detail: 'A low-glare dark palette with the same macro colors.' }
+  { key: 'charcoal', label: 'Charcoal', detail: 'A low-glare dark palette with the same macro colors.' },
+  { key: 'ocean', label: 'Coastal Blue', detail: 'A cool sea-glass palette with strong contrast.' },
+  { key: 'orchid', label: 'Orchid Dusk', detail: 'A soft violet palette with warm coral actions.' }
 ];
 
 const themeFile = new File(Paths.document, 'fitness-theme.txt');
@@ -34,18 +46,20 @@ const themeFile = new File(Paths.document, 'fitness-theme.txt');
 function readTheme(): AppThemeName {
   try {
     const value = themeFile.exists ? themeFile.textSync().trim() : '';
-    return value === 'neutral' || value === 'charcoal' || value === 'warm' ? value : 'warm';
+    return value === 'neutral' || value === 'charcoal' || value === 'warm' || value === 'ocean' || value === 'orchid' ? value : 'warm';
   } catch {
     return 'warm';
   }
 }
 
 export const activeTheme = readTheme();
-export const colors = activeTheme === 'neutral' ? neutral : activeTheme === 'charcoal' ? charcoal : warm;
+export const colors = activeTheme === 'neutral' ? neutral : activeTheme === 'charcoal' ? charcoal : activeTheme === 'ocean' ? ocean : activeTheme === 'orchid' ? orchid : warm;
 export const isDarkTheme = activeTheme === 'charcoal';
 export const atmosphere = activeTheme === 'charcoal'
   ? { one: '#26372E', two: '#40261F' }
-  : activeTheme === 'neutral' ? { one: '#F4DCCB', two: '#D7E6DD' } : { one: '#EBC7AE', two: '#BFD8C8' };
+  : activeTheme === 'neutral' ? { one: '#F4DCCB', two: '#D7E6DD' }
+    : activeTheme === 'ocean' ? { one: '#C8E8ED', two: '#D8E8F5' }
+      : activeTheme === 'orchid' ? { one: '#EAD7EA', two: '#E9D9C7' } : { one: '#EBC7AE', two: '#BFD8C8' };
 
 export function saveAppTheme(theme: AppThemeName): void {
   if (!themeFile.exists) themeFile.create({ intermediates: true });

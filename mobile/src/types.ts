@@ -171,6 +171,7 @@ export interface AssistantMessage { id: string; role: 'user' | 'assistant'; text
 export interface UserProfile {
   id: string;
   displayName?: string;
+  profilePhotoUri?: string;
   sex: 'male' | 'female' | 'other';
   ageYears: number;
   heightCm: number;
