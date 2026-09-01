@@ -23,6 +23,9 @@ export interface FoodItem {
   id: string;
   name: string;
   brand?: string;
+  /** Owner-selected display overrides. They never change nutrition data. */
+  emoji?: string;
+  imageUri?: string;
   barcode?: string;
   serving: { unit: string; amount: number; gramsPerUnit: number };
   nutrition: NutritionPer100g;
@@ -129,6 +132,8 @@ export interface RecipeInput {
   finalWeightGrams?: number;
   ingredients: RecipeIngredient[];
   sourceDescription?: string;
+  emoji?: string;
+  imageUri?: string;
 }
 
 export type AgentIntent = 'log_foods' | 'create_recipe_and_log' | 'clarify';

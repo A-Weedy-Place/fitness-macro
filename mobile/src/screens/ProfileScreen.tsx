@@ -15,16 +15,16 @@ import { recommendDailyGoal } from '../logic/tdee';
 
 type Panel = 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
+export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, initialPanel, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
   state: AppState; date: string; status: string; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
-  activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>;
+  initialPanel?: Panel; activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>;
   pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => string; onImport: (text: string) => void;
   onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
 }) {
   const profile = state.profile;
   const initialHeight = profile?.heightCm || 175;
   const initialImperialHeight = cmToFeetInches(initialHeight);
-  const [panel, setPanel] = useState<Panel>(null);
+  const [panel, setPanel] = useState<Panel>(initialPanel || null);
   const [name, setName] = useState(profile?.displayName || '');
   const [sex, setSex] = useState<ProfileInput['sex']>(profile?.sex || 'male');
   const [age, setAge] = useState(String(profile?.ageYears || 30));
@@ -53,6 +53,10 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
     const preferredWeight = profile.preferredWeightUnit || 'kg';
     setName(profile.displayName || ''); setSex(profile.sex); setAge(String(profile.ageYears)); setHeightUnit(preferredHeight); setHeight(String(profile.heightCm)); setFeet(String(imperial.feet)); setInches(String(imperial.inches)); setWeightUnit(preferredWeight); setWeight(String(preferredWeight === 'lb' ? kgToLb(profile.bodyWeightKg).toFixed(1) : profile.bodyWeightKg)); setTarget(String(preferredWeight === 'lb' && profile.targetWeightKg ? kgToLb(profile.targetWeightKg).toFixed(1) : profile.targetWeightKg || '')); setFactor(String(profile.activityFactor)); setMode(profile.goalMode === 'lose' || profile.goalMode === 'gain' ? profile.goalMode : 'maintain'); setIntensity(profile.goalIntensity || 'moderate'); setTargetDate(profile.targetDate || date); setTimeZone(profile.timeZone || 'device');
   }, [profile?.updatedAt, date]);
+
+  useEffect(() => {
+    if (initialPanel) setPanel(initialPanel);
+  }, [initialPanel]);
 
   const year = useMemo(() => {
     const series = buildDailySeries({ endDate: date, days: 365, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
@@ -163,7 +167,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
 
     {panel === 'time' ? <><SectionTitle title="Date & time" detail="used for new diary items" /><Card><Text style={styles.explainer}>Device time is the normal choice. It fixes the old UTC date shift and works wherever the phone travels.</Text><ChipRow><Chip label={`Device (${deviceTimeZone()})`} selected={timeZone === 'device'} onPress={() => setTimeZone('device')} /><Chip label="Pakistan · UTC+5" selected={timeZone === 'Asia/Karachi'} onPress={() => setTimeZone('Asia/Karachi')} /></ChipRow><Field label="Other IANA time zone (optional)" value={timeZone === 'device' || timeZone === 'Asia/Karachi' ? '' : timeZone} onChangeText={(value) => setTimeZone(value.trim() || 'device')} placeholder="Example: Europe/London" autoCapitalize="none" /><Button label="Save date & time" onPress={saveTimeZone} /></Card></> : null}
 
-    {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Your choice is saved without leaving this screen and applies the next time you open the app.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>Weed Fitness follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
+    {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Applying a palette briefly reloads the static color layer, then returns here.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>Weed Fitness follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
 
     {panel === 'connections' ? <><SectionTitle title="Connections" detail="services used by this phone" /><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={voiceDetail} state={voiceLabel} /><ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation. Your diary remains on this phone." state={foodAgentLabel} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Share workouts, active calories, distance, and weight from Health Connect. Tracker source labels are kept on imported workouts.'} state={healthLabel} /><View style={styles.actions}><Button label={healthConnect?.permissionGranted ? 'Update access' : 'Connect Health'} compact tone="secondary" onPress={onConnectHealth} />{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="ghost" onPress={onOpenHealthSettings} /> : null}<Button label="Refresh services" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail="If Strava shares an activity with Health Connect, it is imported here automatically with a Strava source label. No separate Strava API or subscription is used." state="Via Health Connect" /></Card></> : null}
 

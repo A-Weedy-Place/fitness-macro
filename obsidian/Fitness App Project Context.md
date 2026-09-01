@@ -4,13 +4,13 @@ project: fitness-macro
 updated: 2026-08-31
 ---
 
-## Source of truth: standalone mobile product architecture - 2026-08-31
+## Source of truth: standalone mobile product architecture - 2026-09-01
 
 > This section supersedes the older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual mobile-key notes below. Those sections are historical records, not the forward plan.
 
 ### Product definition
 
-- **FitnessMacro is a standalone Android nutrition app.** The APK owns diary, cookbook, recipes, targets, plans, trends, profile, local lock, and portable backup. Core features must not need a PC.
+- **Weed Fitness is a standalone Android nutrition app.** The APK owns diary, cookbook, recipes, targets, plans, trends, profile, local lock, and portable backup. Core features must not need a PC. `FitnessMacro` remains only in internal identifiers retained to preserve existing app data and build updates.
 - The app has internet. AI features are online, but normal local features remain usable offline.
 - Do not package Whisper, an LLM, Codex CLI, or any large model on the phone. Do not ask the user to enter an AI API key.
 - Use Groq `whisper-large-v3-turbo` for STT and `openai/gpt-oss-120b` for confirmation-gated food-agent plans. The mobile app sends compact relevant local context and applies approved actions to its own database.
@@ -41,6 +41,16 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archive and is not used at runtime.
 - `mobile/src/services/agentClient.ts` now calls the Worker directly. Mobile state is schema **7** with no remote sync queue.
 - `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
+
+## Food correctness and editable cookbook stage — 2026-09-01
+
+- A named prepared drink/dish is one diary food, not separate ingredient rows. Cold milk coffee, milk coffee, iced coffee, lassi, shakes, and comparable composite drinks now force `create_recipe_and_log`; component foods belong inside the recipe only.
+- Diary edits use visible names naturally. The relay receives stable IDs plus food names and now resolves harmless differences such as `coffee black` / `Coffee, black` to the correct entry before confirmation. Genuine ambiguity still asks a clarification.
+- Nutrition calculation honours each diary entry's selected unit. Changing milk from 1 cup to 150 ml calculates 150 ml, not 150 cups.
+- The Food book control opens separate personal recipes, AI recipes, and custom foods. Food editing covers name/brand/macros/emoji/gallery photo; recipe editing covers ingredients, quantities, servings, name, emoji, and gallery photo. Logged dates and amounts are preserved; their calculations use the corrected reusable food/recipe values.
+- Recent-food plus controls no longer cover a food name or image. Food/recipe photos render in the library, detail sheet, and diary.
+- Themes use a safe static-style reload for complete palette changes. A stored return marker puts the owner back in **You → Appearance & display**, never Today, after selecting a theme. A future dynamic-token refactor can remove the short reload.
+- Stage validation: mobile and relay TypeScript pass; 14 mobile core tests include the cup-to-ml regression. A new APK is required for the expanded native gallery permission wording.
 
 ### Standalone relay validation — 2026-08-31
 

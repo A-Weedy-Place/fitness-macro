@@ -1,12 +1,12 @@
 # context.md
 
-## Source of truth: standalone mobile product architecture - 2026-08-31
+## Source of truth: standalone mobile product architecture - 2026-09-01
 
 This section supersedes older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual-mobile-key notes below. Older sections are historical implementation records only.
 
 ### Product definition
 
-- **FitnessMacro is a standalone Android nutrition app.** The installed APK owns the user's diary, cookbook, recipes, targets, plans, trends, profile, local app lock, and portable backup. These normal features must work without a PC.
+- **Weed Fitness is a standalone Android nutrition app.** The installed APK owns the user's diary, cookbook, recipes, targets, plans, trends, profile, local app lock, and portable backup. These normal features must work without a PC. `FitnessMacro` remains only in internal identifiers retained to preserve existing app data and build updates.
 - The app has internet access. AI features are online by design; the app must remain useful if the internet is unavailable.
 - The user does **not** want Whisper, an LLM, Codex CLI, or another large model packaged on the phone. The app must not ask the user to paste an AI API key.
 - The product uses two Groq-hosted models: `whisper-large-v3-turbo` for speech-to-text and `openai/gpt-oss-120b` for typed food-agent reasoning. The agent reads compact relevant local context, returns confirmation-gated actions, and the mobile app itself applies approved changes to its local database.
@@ -38,6 +38,16 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archival copy and is not used at runtime.
 - `mobile/src/services/agentClient.ts` now calls the Worker directly. Local state is schema **7** and has no remote-operation queue or last-synced timestamp.
 - `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
+
+## Food correctness and editable cookbook stage — 2026-09-01
+
+- A named prepared drink or dish is one diary food, not a set of separate diary rows. The relay now explicitly treats cold milk coffee, milk coffee, iced coffee, lassi, shakes, and comparable composite drinks as `create_recipe_and_log`: individual ingredients are saved inside the recipe only.
+- Food/time edits no longer depend on the owner knowing database IDs. The app shares actual visible food names and IDs with the relay; the relay now resolves harmless wording differences such as `coffee black` versus `Coffee, black` to the exact diary entry before the owner confirms the change. It preserves ambiguity as a clarification rather than guessing.
+- Diary nutrition now honours the unit saved on each entry. Editing 1 cup of milk to 150 ml calculates 150 ml (about 75 kcal for 2% milk), never 150 cups.
+- **Food** now has a book control for an explicit cookbook view: personal recipes, AI-created recipes, and custom foods are separate. Opening a food gives an edit action; a recipe editor updates ingredients, portions, servings, recipe name, emoji, and a gallery photo. A food editor updates custom-food name/brand/macros, emoji, and a gallery photo. Logged dates and amounts are preserved; calculations use the corrected reusable food/recipe values.
+- Recent-food plus buttons are no longer positioned over food text or a food image. Chosen food/recipe photos render in the library, detail sheet, and diary row.
+- Themes remain static-style based at this point, so changing a palette performs a controlled in-app reload to apply every static surface. A one-time marker restores **You → Appearance & display** after the reload rather than returning the owner to Today. A future dynamic-token refactor can remove this brief reload, but it is not required for correct theme application.
+- Validation in this stage: mobile TypeScript and relay TypeScript pass; the mobile core suite now has 14 tests, including the cup-to-ml regression test. The new native gallery permission wording requires a replacement APK.
 
 ### Standalone relay validation — 2026-08-31
 

@@ -1,6 +1,7 @@
 import { FoodItem } from '../types';
 
-export function foodEmoji(food: Pick<FoodItem, 'name' | 'tags'>): string {
+export function foodEmoji(food: Pick<FoodItem, 'name' | 'tags' | 'emoji'>): string {
+  if (food.emoji?.trim()) return food.emoji.trim();
   const value = `${food.name} ${(food.tags || []).join(' ')}`.toLowerCase();
   const rules: Array<[RegExp, string]> = [
     [/milk|doodh|dairy/, '🥛'], [/egg/, '🥚'], [/chicken|poultry/, '🍗'], [/beef|mutton|goat|meat/, '🥩'],
@@ -15,4 +16,3 @@ export function foodEmoji(food: Pick<FoodItem, 'name' | 'tags'>): string {
   ];
   return rules.find(([pattern]) => pattern.test(value))?.[1] || '🍽️';
 }
-

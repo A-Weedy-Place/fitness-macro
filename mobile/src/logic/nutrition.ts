@@ -1,4 +1,5 @@
 import { FoodEntry, FoodItem } from '../types';
+import { gramsForQuantity } from './portions';
 
 export interface NutritionTotals {
   calories: number;
@@ -8,7 +9,9 @@ export interface NutritionTotals {
 }
 
 export function nutritionForEntry(entry: FoodEntry, food: FoodItem): NutritionTotals {
-  const grams = entry.portion.quantity * food.serving.gramsPerUnit;
+  // A diary item keeps the display unit selected by the owner. Never treat a
+  // value entered as millilitres as if it were the food's default cup/serving.
+  const grams = gramsForQuantity(food, entry.portion.quantity, entry.portion.unit);
   const scale = grams / 100;
   return {
     calories: food.nutrition.calories * scale,

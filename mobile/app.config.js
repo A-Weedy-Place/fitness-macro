@@ -32,7 +32,7 @@ export default {
       [
         'expo-image-picker',
         {
-          photosPermission: 'Allow Weed Fitness to use a profile photo saved on this device.'
+          photosPermission: 'Allow Weed Fitness to use profile, recipe, and food photos saved on this device.'
         }
       ],
       'expo-secure-store',

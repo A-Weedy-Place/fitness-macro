@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationBar } from 'expo-navigation-bar';
+import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
 import {
   ActivityEntry,
@@ -51,7 +52,7 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AssistantScreen } from './src/screens/AssistantScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { AccountLockScreen } from './src/screens/AccountLockScreen';
-import { activeTheme, AppThemeName, atmosphere, colors, isDarkTheme, saveAppTheme } from './src/theme';
+import { activeTheme, AppThemeName, atmosphere, colors, consumeThemeAppearanceReturn, isDarkTheme, saveAppTheme, saveThemeAppearanceReturn } from './src/theme';
 import { withDemoData } from './src/logic/demoData';
 import { createPortableBackup, restorePortableBackup } from './src/logic/backup';
 import { QuickLogSheet, PlateItem } from './src/components/QuickLogSheet';
@@ -79,7 +80,8 @@ export default function App() {
 function FitnessApp() {
   const [state, setState] = useState<AppState>(EMPTY_STATE);
   const [hydrated, setHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('today');
+  const [returnToAppearance] = useState(() => consumeThemeAppearanceReturn());
+  const [activeTab, setActiveTab] = useState<TabKey>(() => returnToAppearance ? 'profile' : 'today');
   const [date, setDate] = useState(today());
   const [libraryTime, setLibraryTime] = useState('08:00');
   const [quickLogVisible, setQuickLogVisible] = useState(false);
@@ -292,11 +294,12 @@ function FitnessApp() {
   function changeTheme(theme: AppThemeName) {
     if (theme === pendingTheme) return;
     saveAppTheme(theme);
+    saveThemeAppearanceReturn();
     setPendingTheme(theme);
-    // Screen styles are currently created when the app starts. Save the choice
-    // without kicking the owner away from Appearance; it applies on their next
-    // normal app open.
-    setStatus('Theme saved. It will apply the next time you open Weed Fitness.');
+    // Existing StyleSheets capture colors at module-load time. A controlled
+    // reload is the safe way to apply every surface at once; the return marker
+    // reopens Appearance instead of dumping the owner on Today.
+    void Updates.reloadAsync().catch(() => setStatus('Theme saved. Close and reopen Weed Fitness to apply it.'));
   }
 
   async function transcribeFood(uri: string) {
@@ -528,10 +531,28 @@ function FitnessApp() {
     const recipeId = makeId('recipe');
     const food: FoodItem = {
       id: foodId, name: input.name, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g,
-      tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
+      emoji: input.emoji, imageUri: input.imageUri, tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
     };
     const recipe: Recipe = { id: recipeId, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, foodId, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, createdAt: timestamp, updatedAt: timestamp };
     await commit(upsertRecipe(upsertFood(state, food), recipe), `${food.name} saved as a reusable dish`);
+    return food;
+  }
+
+  async function updateFood(food: FoodItem) {
+    await commit(upsertFood(state, food), `${food.name} updated in your library`);
+  }
+
+  async function updateRecipe(recipeId: string, input: RecipeInput) {
+    const previousRecipe = state.recipes.find((recipe) => recipe.id === recipeId);
+    if (!previousRecipe) throw new Error('recipe_not_found');
+    const previousFood = state.foods.find((food) => food.id === previousRecipe.foodId);
+    if (!previousFood) throw new Error('recipe_food_not_found');
+    const calculation = calculateRecipe(input.ingredients, state.foods, input.finalWeightGrams);
+    if (!calculation.finalGrams || !input.servings) throw new Error('invalid_recipe');
+    const timestamp = now();
+    const food: FoodItem = { ...previousFood, name: input.name, emoji: input.emoji, imageUri: input.imageUri, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g, updatedAt: timestamp };
+    const recipe: Recipe = { ...previousRecipe, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, updatedAt: timestamp };
+    await commit(upsertRecipe(upsertFood(state, food), recipe), `${food.name} recipe updated`);
     return food;
   }
 
@@ -602,8 +623,8 @@ function FitnessApp() {
   else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
-  else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} onUpdateFood={updateFood} onUpdateRecipe={updateRecipe} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

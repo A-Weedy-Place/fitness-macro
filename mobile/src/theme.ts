@@ -42,6 +42,7 @@ export const themeOptions: Array<{ key: AppThemeName; label: string; detail: str
 ];
 
 const themeFile = new File(Paths.document, 'fitness-theme.txt');
+const themeReturnFile = new File(Paths.document, 'fitness-theme-return.txt');
 
 function readTheme(): AppThemeName {
   try {
@@ -64,6 +65,28 @@ export const atmosphere = activeTheme === 'charcoal'
 export function saveAppTheme(theme: AppThemeName): void {
   if (!themeFile.exists) themeFile.create({ intermediates: true });
   themeFile.write(theme);
+}
+
+/** The palette is read while static React Native styles initialise. Store the
+ * desired return location before a safe reload so changing a palette never
+ * strands the owner back on Today. */
+export function saveThemeAppearanceReturn(): void {
+  try {
+    if (!themeReturnFile.exists) themeReturnFile.create({ intermediates: true });
+    themeReturnFile.write('appearance');
+  } catch {
+    // Theme choice remains valid even if the optional return hint cannot save.
+  }
+}
+
+export function consumeThemeAppearanceReturn(): boolean {
+  try {
+    const shouldReturn = themeReturnFile.exists && themeReturnFile.textSync().trim() === 'appearance';
+    if (themeReturnFile.exists) themeReturnFile.delete();
+    return shouldReturn;
+  } catch {
+    return false;
+  }
 }
 
 export const radii = { small: 10, medium: 16, large: 24, pill: 999 } as const;

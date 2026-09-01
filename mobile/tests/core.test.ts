@@ -52,6 +52,14 @@ test('packet servings use serving weight before per-100g nutrition', () => {
   assert.equal(value.protein, 12);
 });
 
+test('switching a cup-based food to millilitres uses millilitres, not cups', () => {
+  const milk = { ...food, serving: { unit: 'cup', amount: 1, gramsPerUnit: 244 }, nutrition: { calories: 50, protein: 3.3, carbs: 4.8, fat: 2 } };
+  const milkEntry = { ...entry('milk_ml', '2026-08-07', 150), portion: { foodId: food.id, quantity: 150, unit: 'ml' } };
+  const value = nutritionForEntry(milkEntry, milk);
+  assert.equal(value.calories, 75);
+  assert.ok(Math.abs(value.protein - 4.95) < 0.0001);
+});
+
 test('TDEE and macro targets are deterministic and adjustment is bounded', () => {
   const profile: UserProfile = {
     id: 'profile', sex: 'male', ageYears: 30, heightCm: 175, bodyWeightKg: 75,
