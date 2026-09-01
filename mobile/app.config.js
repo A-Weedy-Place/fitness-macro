@@ -7,6 +7,7 @@ export default {
     jsEngine: 'hermes',
     updates: {
       enabled: true,
+      url: 'https://u.expo.dev/714cf37d-459a-4408-b025-1334f0bfc779',
       checkAutomatically: 'ON_LOAD'
     },
     runtimeVersion: {
@@ -22,7 +23,7 @@ export default {
       [
         'expo-navigation-bar',
         {
-          hidden: true,
+          hidden: false,
           style: 'dark',
           enforceContrast: false
         }
@@ -65,6 +66,7 @@ export default {
     },
     android: {
       package: 'com.ashar.fitnessmacro',
+      softwareKeyboardLayoutMode: 'resize',
       // These are declared in the Android manifest so the Health Connect
       // permission screen can appear in a standalone APK. The app requests
       // only these three read scopes at runtime.

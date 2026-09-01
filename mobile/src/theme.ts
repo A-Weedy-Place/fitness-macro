@@ -9,36 +9,36 @@ interface ThemeColors {
 }
 
 const warm: ThemeColors = {
-  paper: '#F7F1E7', paperDeep: '#EDE1D0', card: '#FFFDF8', ink: '#1D2C25', muted: '#6F746A', faint: '#9A9C90', line: '#DED3C2',
-  pine: '#173F2D', pineSoft: '#DFECE3', coral: '#E66B50', coralSoft: '#FAE2D9', gold: '#D8A43A', goldSoft: '#FAF0CF', sky: '#527FA4', danger: '#A64035', white: '#FFFFFF'
+  paper: '#F8F8F5', paperDeep: '#EFF0EC', card: '#FFFFFF', ink: '#233029', muted: '#68726B', faint: '#9BA39D', line: '#DFE3DE',
+  pine: '#31483C', pineSoft: '#EEF1ED', coral: '#31483C', coralSoft: '#F1F3F0', gold: '#31483C', goldSoft: '#F1F3F0', sky: '#31483C', danger: '#A64035', white: '#FFFFFF'
 };
 
 const neutral: ThemeColors = {
-  paper: '#F5F6F4', paperDeep: '#E9EBE8', card: '#FFFFFF', ink: '#111412', muted: '#6B706C', faint: '#A3A7A3', line: '#E2E5E1',
-  pine: '#151917', pineSoft: '#ECEFEC', coral: '#FF7357', coralSoft: '#FFF0EC', gold: '#F2B934', goldSoft: '#FFF7DB', sky: '#4C91FF', danger: '#A83F32', white: '#FFFFFF'
+  paper: '#F7F8F6', paperDeep: '#EEF0ED', card: '#FFFFFF', ink: '#202622', muted: '#6C736E', faint: '#A1A8A2', line: '#E0E4E0',
+  pine: '#3F4A43', pineSoft: '#EFF1EF', coral: '#3F4A43', coralSoft: '#F1F3F1', gold: '#3F4A43', goldSoft: '#F1F3F1', sky: '#3F4A43', danger: '#A83F32', white: '#FFFFFF'
 };
 
 const charcoal: ThemeColors = {
-  paper: '#111412', paperDeep: '#202521', card: '#191D1A', ink: '#F4F1E9', muted: '#A7A9A3', faint: '#777D77', line: '#303631',
-  pine: '#0B0E0C', pineSoft: '#26372E', coral: '#FF8065', coralSoft: '#40261F', gold: '#F0BF4B', goldSoft: '#3A321E', sky: '#69A5FF', danger: '#FF8A78', white: '#FFFFFF'
+  paper: '#202522', paperDeep: '#2A302C', card: '#272D29', ink: '#F3F5F1', muted: '#B1B8B2', faint: '#858E87', line: '#39413B',
+  pine: '#607467', pineSoft: '#303832', coral: '#607467', coralSoft: '#303832', gold: '#607467', goldSoft: '#303832', sky: '#607467', danger: '#FF8A78', white: '#FFFFFF'
 };
 
 const ocean: ThemeColors = {
-  paper: '#EEF6F8', paperDeep: '#DCECEF', card: '#FCFEFF', ink: '#14323B', muted: '#63777B', faint: '#96A9AD', line: '#CBDDE1',
-  pine: '#0D4B5C', pineSoft: '#D9EDF1', coral: '#D96852', coralSoft: '#FAE4DF', gold: '#D9A437', goldSoft: '#FCF1D2', sky: '#317AA0', danger: '#B04B3C', white: '#FFFFFF'
+  paper: '#F2F7F7', paperDeep: '#E8EFEF', card: '#FCFEFE', ink: '#26383A', muted: '#65787A', faint: '#9CACAD', line: '#D9E3E3',
+  pine: '#3D6265', pineSoft: '#EBF0F0', coral: '#3D6265', coralSoft: '#EDF2F2', gold: '#3D6265', goldSoft: '#EDF2F2', sky: '#3D6265', danger: '#B04B3C', white: '#FFFFFF'
 };
 
 const orchid: ThemeColors = {
-  paper: '#F8F2F8', paperDeep: '#EEE0ED', card: '#FFFDFE', ink: '#302136', muted: '#796A7B', faint: '#A796A9', line: '#E2D4E2',
-  pine: '#4A2D59', pineSoft: '#EEE1F1', coral: '#C95D76', coralSoft: '#F9E0E7', gold: '#C89338', goldSoft: '#FBF0D4', sky: '#596EAE', danger: '#A8425C', white: '#FFFFFF'
+  paper: '#F8F5F8', paperDeep: '#F0EBF0', card: '#FFFDFE', ink: '#382E3A', muted: '#756B77', faint: '#A49BA5', line: '#E3DDE4',
+  pine: '#5D4D61', pineSoft: '#F0ECF0', coral: '#5D4D61', coralSoft: '#F2EEF2', gold: '#5D4D61', goldSoft: '#F2EEF2', sky: '#5D4D61', danger: '#A8425C', white: '#FFFFFF'
 };
 
 export const themeOptions: Array<{ key: AppThemeName; label: string; detail: string }> = [
-  { key: 'warm', label: 'Warm Harvest', detail: 'The original cream, forest, coral, and gold palette.' },
-  { key: 'neutral', label: 'Clean Neutral', detail: 'The current crisp white and graphite palette.' },
-  { key: 'charcoal', label: 'Charcoal', detail: 'A low-glare dark palette with the same macro colors.' },
-  { key: 'ocean', label: 'Coastal Blue', detail: 'A cool sea-glass palette with strong contrast.' },
-  { key: 'orchid', label: 'Orchid Dusk', detail: 'A soft violet palette with warm coral actions.' }
+  { key: 'warm', label: 'Warm Harvest', detail: 'A quiet cream and forest palette.' },
+  { key: 'neutral', label: 'Clean Neutral', detail: 'Crisp white with soft graphite accents.' },
+  { key: 'charcoal', label: 'Charcoal', detail: 'A low-glare dark palette.' },
+  { key: 'ocean', label: 'Coastal Blue', detail: 'A calm sea-glass palette.' },
+  { key: 'orchid', label: 'Orchid Dusk', detail: 'A muted violet palette.' }
 ];
 
 const themeFile = new File(Paths.document, 'fitness-theme.txt');
@@ -55,11 +55,7 @@ function readTheme(): AppThemeName {
 export const activeTheme = readTheme();
 export const colors = activeTheme === 'neutral' ? neutral : activeTheme === 'charcoal' ? charcoal : activeTheme === 'ocean' ? ocean : activeTheme === 'orchid' ? orchid : warm;
 export const isDarkTheme = activeTheme === 'charcoal';
-export const atmosphere = activeTheme === 'charcoal'
-  ? { one: '#26372E', two: '#40261F' }
-  : activeTheme === 'neutral' ? { one: '#F4DCCB', two: '#D7E6DD' }
-    : activeTheme === 'ocean' ? { one: '#C8E8ED', two: '#D8E8F5' }
-      : activeTheme === 'orchid' ? { one: '#EAD7EA', two: '#E9D9C7' } : { one: '#EBC7AE', two: '#BFD8C8' };
+export const atmosphere = { one: 'transparent', two: 'transparent' };
 
 export function saveAppTheme(theme: AppThemeName): void {
   if (!themeFile.exists) themeFile.create({ intermediates: true });

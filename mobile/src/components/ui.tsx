@@ -1,5 +1,6 @@
 import React from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Pressable,
   ScrollView,
@@ -89,9 +90,9 @@ export function ChipRow({ children }: { children: React.ReactNode }) {
   return <View style={styles.chipRow}>{children}</View>;
 }
 
-export function MetricTile({ value, label, accent = 'pine' }: { value: string; label: string; accent?: 'pine' | 'coral' | 'gold' | 'sky' }) {
+export function MetricTile({ value, label }: { value: string; label: string; accent?: 'pine' | 'coral' | 'gold' | 'sky' }) {
   return (
-    <View style={[styles.metric, { borderTopColor: colors[accent] }]}>
+    <View style={styles.metric}>
       <Text style={styles.metricValue}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
@@ -133,13 +134,14 @@ const tabs: Array<{ key: TabKey; label: string; icon: TabIconName }> = [
 ];
 
 export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.tabs}>
+    <View style={[styles.tabs, { minHeight: 64 + insets.bottom, paddingBottom: Math.max(8, insets.bottom) }]}>
       {tabs.map((tab) => {
         const selected = tab.key === active;
         return (
           <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={tab.label}>
-            <View style={[styles.tabMark, tab.key === 'assistant' && styles.tabMarkAssistant, selected && styles.tabMarkSelected, selected && tab.key === 'assistant' && styles.tabMarkAssistantSelected]}><Ionicons name={tab.icon} size={tab.key === 'assistant' ? 19 : 18} color={selected ? colors.white : colors.muted} /></View>
+            <View style={[styles.tabMark, selected && styles.tabMarkSelected]}><Ionicons name={tab.icon} size={18} color={selected ? colors.white : colors.muted} /></View>
             <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>{tab.label}</Text>
           </Pressable>
         );
@@ -156,14 +158,14 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontWeight: '900', fontSize: 24, lineHeight: 29, letterSpacing: -0.5, flexShrink: 1 },
   subtitle: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 2, maxWidth: 330, flexShrink: 1 },
   card: { backgroundColor: colors.card, borderRadius: 21, padding: 14, borderWidth: 1, borderColor: colors.line, marginBottom: 11, ...shadows.card },
-  cardDark: { backgroundColor: colors.pine, borderColor: colors.pine },
+  cardDark: { backgroundColor: colors.card, borderColor: colors.line },
   sectionTitleRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: 5, marginBottom: 9, marginTop: 4 },
   sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', flexShrink: 1 },
   sectionDetail: { color: colors.muted, fontSize: 9, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
   button: { minHeight: 42, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
   buttonCompact: { minHeight: 38, paddingVertical: 8, paddingHorizontal: 13 },
   button_primary: { backgroundColor: colors.coral },
-  button_secondary: { backgroundColor: colors.pineSoft, borderWidth: 1, borderColor: '#B7CDC1' },
+  button_secondary: { backgroundColor: colors.pineSoft, borderWidth: 1, borderColor: colors.line },
   button_ghost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.line },
   button_danger: { backgroundColor: colors.coralSoft },
   buttonPressed: { opacity: 0.55 },
@@ -180,7 +182,7 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: colors.pine, borderColor: colors.pine },
   chipLabel: { color: colors.muted, fontWeight: '800', fontSize: 10, textTransform: 'capitalize', flexShrink: 1 },
   chipLabelSelected: { color: colors.white },
-  metric: { width: '48%', minHeight: 94, backgroundColor: colors.card, borderRadius: radii.medium, padding: 13, borderTopWidth: 4, borderWidth: 1, borderColor: colors.line },
+  metric: { width: '48%', minHeight: 94, backgroundColor: colors.card, borderRadius: radii.medium, padding: 13, borderWidth: 1, borderColor: colors.line },
   metricValue: { color: colors.ink, fontSize: 21, fontWeight: '900', flexShrink: 1 },
   metricLabel: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: 5 },
   empty: { alignItems: 'center', paddingVertical: 25, paddingHorizontal: 20 },
@@ -193,12 +195,10 @@ const styles = StyleSheet.create({
   dateCenter: { flex: 1, alignItems: 'center', paddingVertical: 4 },
   dateMain: { color: colors.ink, fontWeight: '900', fontSize: 14 },
   dateSub: { color: colors.muted, fontSize: 9, marginTop: 2 },
-  tabs: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, borderTopWidth: 1, borderColor: colors.line, minHeight: 72, flexDirection: 'row', paddingHorizontal: 7, paddingTop: 7, paddingBottom: 9 },
+  tabs: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, borderTopWidth: 1, borderColor: colors.line, flexDirection: 'row', paddingHorizontal: 7, paddingTop: 7 },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabMark: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center' },
   tabMarkSelected: { backgroundColor: colors.ink },
-  tabMarkAssistant: { width: 34, height: 34, borderRadius: 17, marginTop: -7, backgroundColor: colors.pineSoft },
-  tabMarkAssistantSelected: { backgroundColor: colors.coral },
   tabLabel: { color: colors.muted, fontSize: 8, fontWeight: '800', marginTop: 3 },
   tabLabelSelected: { color: colors.ink }
 });

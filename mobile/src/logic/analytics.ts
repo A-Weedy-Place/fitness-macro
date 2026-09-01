@@ -101,9 +101,9 @@ export function macroCalorieSplit(series: DailyAnalyticsPoint[]) {
   const carbs = series.reduce((sum, day) => sum + day.carbs, 0) * 4;
   const fat = series.reduce((sum, day) => sum + day.fat, 0) * 9;
   return [
-    { label: 'Protein', value: protein, color: '#D9633D' },
-    { label: 'Carbs', value: carbs, color: '#DAAC4E' },
-    { label: 'Fat', value: fat, color: '#547F92' }
+    { label: 'Protein', value: protein },
+    { label: 'Carbs', value: carbs },
+    { label: 'Fat', value: fat }
   ];
 }
 

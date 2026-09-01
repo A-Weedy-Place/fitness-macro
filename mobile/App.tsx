@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, AppState as NativeAppState, DevSettings, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
+import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SecureStore from 'expo-secure-store';
@@ -39,7 +39,7 @@ import {
   upsertRecipe,
   upsertWeight
 } from './src/storage/localDb';
-import { agentStatus, audioStatus, getGoalRecommendation, GoalReviewResponse, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, searchFoods as searchHostedFoods, transcribeRecording } from './src/services/agentClient';
+import { agentStatus, audioStatus, getGoalRecommendation, lookupFoodByBarcode, planAssistantCommand, resolveTranscript, searchFoods as searchHostedFoods, transcribeRecording } from './src/services/agentClient';
 import { estimateTdee, mifflinStJeor, recommendDailyGoal } from './src/logic/tdee';
 import { buildPlanFromDay, instantiatePlan } from './src/logic/plans';
 import { dateDistance, dateFor, shiftDate, today } from './src/utils/dates';
@@ -74,7 +74,7 @@ function now() {
 const LOCAL_PIN_KEY = 'fitness-macro-local-pin-v1';
 
 export default function App() {
-  return <SafeAreaProvider><NavigationBar hidden style={isDarkTheme ? 'dark' : 'light'} /><FitnessApp /></SafeAreaProvider>;
+  return <SafeAreaProvider><NavigationBar hidden={false} style={isDarkTheme ? 'dark' : 'light'} /><FitnessApp /></SafeAreaProvider>;
 }
 
 function FitnessApp() {
@@ -88,7 +88,6 @@ function FitnessApp() {
   const [status, setStatus] = useState('All data is stored locally first.');
   const [audioConfigured, setAudioConfigured] = useState<boolean | null>(null);
   const [appAgentEnabled, setAppAgentEnabled] = useState<boolean | null>(null);
-  const [goalReview, setGoalReview] = useState<GoalReviewResponse | null>(null);
   const [healthConnect, setHealthConnect] = useState<HealthConnectStatus | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
@@ -206,16 +205,23 @@ function FitnessApp() {
   }
 
   async function searchFoods(query: string) {
-    const normalized = query.toLowerCase().trim();
-    const words = normalized.split(/\s+/).filter(Boolean);
+    const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const aliases: Record<string, string[]> = { dal: ['daal', 'dhal', 'lentil'], daal: ['dal', 'dhal', 'lentil'], dhal: ['dal', 'daal', 'lentil'], mash: ['urad'], urad: ['mash'], roti: ['chapati'], chapati: ['roti'], aloo: ['potato'], keema: ['mince', 'minced'] };
+    const ignored = new Set(['a', 'an', 'and', 'the', 'with', 'of', 'ki', 'ka', 'ke', 'kiya', 'plate', 'dish', 'cooked']);
+    const words = [...new Set(normalized.split(/\s+/).filter((word) => word && !ignored.has(word)).flatMap((word) => [word, ...(aliases[word] || [])]))];
     const score = (food: FoodItem) => {
-      const name = `${food.name} ${food.brand || ''}`.toLowerCase();
+      const name = `${food.name} ${food.brand || ''} ${(food.tags || []).join(' ')}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
       const matchedWords = words.filter((word) => name.includes(word)).length;
-      const relevance = name === normalized ? 100 : name.startsWith(normalized) ? 80 : name.includes(normalized) ? 60 : matchedWords * 12;
-      const source = food.tags?.includes('recipe') || food.tags?.includes('custom-dish') ? 10000 : food.source.source === 'manual' ? 5000 : food.tags?.includes('starter') ? 25 : food.source.source === 'local' ? 20 : food.source.source === 'usda' ? 10 : 0;
+      const relevance = name.trim() === normalized ? 1_000 : name.startsWith(normalized) ? 800 : name.includes(normalized) ? 600 : matchedWords * 100;
+      // A personal recipe should win a tie, but a partial word match must never
+      // outrank an exact regional food just because it was saved earlier.
+      const source = food.tags?.includes('recipe') || food.tags?.includes('custom-dish') ? 80 : food.source.source === 'manual' ? 40 : food.tags?.includes('starter') ? 20 : food.source.source === 'local' ? 15 : food.source.source === 'usda' ? 10 : 0;
       return relevance + source;
     };
-    const local = state.foods.filter((food) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(normalized) || words.length > 0 && words.every((word) => `${food.name} ${food.brand || ''}`.toLowerCase().includes(word))).sort((a, b) => score(b) - score(a));
+    const local = state.foods.filter((food) => {
+      const name = `${food.name} ${food.brand || ''} ${(food.tags || []).join(' ')}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+      return name.includes(normalized) || words.some((word) => name.includes(word));
+    }).sort((a, b) => score(b) - score(a));
     try {
       const result = await searchHostedFoods(query, 8);
       setState((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
@@ -286,13 +292,9 @@ function FitnessApp() {
   function changeTheme(theme: AppThemeName) {
     if (theme === activeTheme) return;
     saveAppTheme(theme);
-    if (Updates.isEnabled) {
-      void Updates.reloadAsync().catch(() => Alert.alert('Restart needed', 'Close and reopen the app once to apply the selected theme.'));
-    } else if (__DEV__) {
-      setTimeout(() => DevSettings.reload(), 80);
-    } else {
-      Alert.alert('Theme saved', 'Close and reopen the app once to apply the selected theme.');
-    }
+    // The palette is read at app startup so all static native styles stay in sync.
+    // Reload the embedded update automatically — no manual restart prompt.
+    void Updates.reloadAsync().catch(() => setStatus('Theme saved. It will finish applying automatically.'));
   }
 
   async function transcribeFood(uri: string) {
@@ -478,7 +480,6 @@ function FitnessApp() {
     try {
       const response = await getGoalRecommendation(profile);
       const program: NutritionProgram = { createdAt: now(), profileUpdatedAt: profile.updatedAt, ...response.review };
-      setGoalReview(response);
       setState((current) => ({ ...current, nutritionProgram: program }));
       setStatus(response.review.aiGenerated ? 'Personalized food structure created with locked local targets.' : 'Safe local food structure created; AI personalization was unavailable.');
     } catch {
@@ -497,18 +498,6 @@ function FitnessApp() {
       setStatus('Portable backup restored successfully.');
     } catch {
       Alert.alert('Backup not recognized', 'Paste a complete FitnessMacro JSON backup or PC-agent export.');
-    }
-  }
-
-  async function reviewCurrentGoal() {
-    if (!state.profile) return;
-    try {
-      const review = await getGoalRecommendation(state.profile);
-      setGoalReview(review);
-      setState((current) => ({ ...current, nutritionProgram: { createdAt: now(), profileUpdatedAt: state.profile!.updatedAt, ...review.review } }));
-      setStatus(review.review.aiGenerated ? 'Food structure refreshed by Groq without changing the safe targets.' : 'Local food structure refreshed; Groq was unavailable.');
-    } catch {
-      setStatus('Hosted AI is unavailable. Your deterministic calorie target remains active.');
     }
   }
 
@@ -579,14 +568,9 @@ function FitnessApp() {
   }
 
   async function refreshIntegrationStatus() {
-    try {
-      const [audioResult, agentResult] = await Promise.all([audioStatus(), agentStatus()]);
-      setAudioConfigured(audioResult.configured);
-      setAppAgentEnabled(agentResult.appAgent.enabled);
-    } catch {
-      setAudioConfigured(null);
-      setAppAgentEnabled(null);
-    }
+    const [audioResult, agentResult] = await Promise.allSettled([audioStatus(), agentStatus()]);
+    setAudioConfigured(audioResult.status === 'fulfilled' ? audioResult.value.configured : false);
+    setAppAgentEnabled(agentResult.status === 'fulfilled' ? agentResult.value.appAgent.enabled : false);
   }
 
   function changeDate(offset: number | 'today') {
@@ -609,7 +593,7 @@ function FitnessApp() {
 
   let screen: React.ReactNode;
   if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} timeZone={state.profile?.timeZone} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onUpdateEntry={updateEntry} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} />;
-  else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} review={goalReview} onReview={() => void reviewCurrentGoal()} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
+  else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;

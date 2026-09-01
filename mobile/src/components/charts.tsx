@@ -80,7 +80,7 @@ export function BarChart({ points }: { points: Array<{ label: string; value: num
   );
 }
 
-export function DonutChart({ segments, centerLabel }: { segments: Array<{ label: string; value: number; color: string }>; centerLabel: string }) {
+export function DonutChart({ segments, centerLabel }: { segments: Array<{ label: string; value: number }>; centerLabel: string }) {
   const size = 154;
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
@@ -90,16 +90,17 @@ export function DonutChart({ segments, centerLabel }: { segments: Array<{ label:
     <View style={styles.donutRow}>
       <Svg width={size} height={size}>
         <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={colors.paperDeep} strokeWidth="18" />
-        {segments.map((segment) => {
+        {segments.map((segment, index) => {
           const length = segment.value / total * circumference;
-          const circle = <Circle key={segment.label} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth="18" strokeLinecap="butt" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} rotation="-90" origin={`${size / 2}, ${size / 2}`} />;
+          const shade = index === 0 ? colors.pine : index === 1 ? colors.muted : colors.faint;
+          const circle = <Circle key={segment.label} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={shade} strokeWidth="18" strokeLinecap="butt" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} rotation="-90" origin={`${size / 2}, ${size / 2}`} />;
           offset += length;
           return circle;
         })}
         <SvgText x={size / 2} y={size / 2 - 3} textAnchor="middle" fill={colors.ink} fontSize="21" fontWeight="900">{centerLabel}</SvgText>
         <SvgText x={size / 2} y={size / 2 + 15} textAnchor="middle" fill={colors.muted} fontSize="9">macro split</SvgText>
       </Svg>
-      <View style={styles.legend}>{segments.map((segment) => <View key={segment.label} style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: segment.color }]} /><View><Text style={styles.legendValue}>{total ? (segment.value / total * 100).toFixed(0) : 0}%</Text><Text style={styles.legendLabel}>{segment.label}</Text></View></View>)}</View>
+      <View style={styles.legend}>{segments.map((segment, index) => <View key={segment.label} style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: index === 0 ? colors.pine : index === 1 ? colors.muted : colors.faint }]} /><View><Text style={styles.legendValue}>{total ? (segment.value / total * 100).toFixed(0) : 0}%</Text><Text style={styles.legendLabel}>{segment.label}</Text></View></View>)}</View>
     </View>
   );
 }
@@ -122,6 +123,6 @@ const styles = StyleSheet.create({
   legendLabel: { color: colors.muted, fontSize: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
   gridCell: { width: 14, height: 14, borderRadius: 4, backgroundColor: colors.paperDeep },
-  gridLogged: { backgroundColor: '#91B5A3' },
+  gridLogged: { backgroundColor: colors.muted },
   gridTarget: { backgroundColor: colors.pine }
 });

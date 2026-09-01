@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { BodyMetricLog } from '../types';
 import { kgToLb } from '../logic/units';
+import { colors } from '../theme';
 
 export function WeightRow({ item, unit = 'kg', onDelete }: { item: BodyMetricLog; unit?: 'kg' | 'lb'; onDelete?: () => void }) {
   return (
@@ -18,16 +19,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DFC9'
+    borderBottomColor: colors.line
   },
   main: {
-    fontWeight: '600'
+    fontWeight: '600',
+    color: colors.ink
   },
   value: {
-    color: '#176B61',
+    color: colors.pine,
     fontWeight: '800'
   },
   copy: { flex: 1 },
-  remove: { backgroundColor: '#F5DED4', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
-  delete: { color: '#A83F32', fontSize: 9, fontWeight: '900' }
+  remove: { backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
+  delete: { color: colors.danger, fontSize: 9, fontWeight: '900' }
 });

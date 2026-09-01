@@ -307,3 +307,18 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Food search and quick logging show compact rows and direct add controls; advanced quantity controls are disclosed only when editing.
 - Food/dish detail shows selected-portion macros and complete per-ingredient recipe nutrition.
 - Body/activity/sync controls are collapsed until requested.
+
+## Current product source of truth — 2026-09-01
+
+- FitnessMacro is a standalone local-first Android nutrition diary. The app must work without a PC, LAN address, Codex CLI, local Whisper process, or manually supplied API key. Phone data includes the profile, food library, recipes, diary, goals, weight, activities, trends, PIN, and portable backup.
+- AI architecture: APK → private Cloudflare Worker → Groq. Groq secrets remain only in Cloudflare. The APK uses a revocable preview access token, never a Groq key. Groq Whisper (`whisper-large-v3-turbo`) provides transcription; Groq-hosted `openai/gpt-oss-120b` produces reviewed action plans and meal-structure recommendations.
+- The retired PC agent/Codex/local Whisper route is historical only and must not be reintroduced. All manual logging/search/editing remain available even when AI is unavailable.
+- AI mutations are plans requiring owner confirmation. The agent can propose food, recipes, weight, activity, diary time/date, goals, or deletion changes; it must never write silently.
+- The preview-environment relay was verified 2026-09-01: both `/v1/audio/status` and `/v1/agent/status` returned HTTP 200 using the APK environment (without printing any token). Integration statuses must be independently refreshed/displayed to avoid false “unavailable” messages.
+- Android navigation controls remain visible and all application content reserves safe-area space above them. Keyboard mode is resize so the Assistant composer remains above the Android keyboard.
+- Keep the main Goals tab compact; optional adaptive-maintenance and flexible-plan rationale is in You → Goals & daily plan. Use device time by default, with Pakistan UTC+5 selectable.
+- Visual design direction: calm, neutral, compact cards; no coloured background blobs, macro-colour overtones, oversized AI tab, or “AI dashboard” visual treatment. Themes reload automatically instead of asking the owner for a manual restart.
+- Voice is compact record → ephemeral upload → editable transcript. Show live audio-meter bars/timer while recording; never retain raw audio.
+- Offline catalog is 108 foods/ingredients including regional staples; it merges into existing phone data. Search has aliases and related results, e.g. `mash ke daal` returns mash/urad/dal. Starter nutrition values are editable estimates.
+- Health Connect is a free optional Android integration and needs the preview/dev APK, not Expo Go.
+- At this checkpoint TypeScript passes and all 13 mobile core tests pass. The next owner artifact is a new EAS preview APK after this UI/reliability stage.

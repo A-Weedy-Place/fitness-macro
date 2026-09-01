@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { ActivityEntry } from '../types';
+import { colors } from '../theme';
 
 export function ActivityRow({ item, onDelete }: { item: ActivityEntry; onDelete?: () => void }) {
   return (
@@ -16,11 +17,11 @@ export function ActivityRow({ item, onDelete }: { item: ActivityEntry; onDelete?
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E8DFC9' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   copy: { flex: 1 },
-  name: { color: '#17211F', fontWeight: '700' },
-  meta: { color: '#6D746F', marginTop: 3 },
-  energy: { color: '#176B61', fontWeight: '800' },
-  remove: { marginLeft: 9, backgroundColor: '#F5DED4', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
-  delete: { color: '#A83F32', fontSize: 9, fontWeight: '900' }
+  name: { color: colors.ink, fontWeight: '700' },
+  meta: { color: colors.muted, marginTop: 3 },
+  energy: { color: colors.pine, fontWeight: '800' },
+  remove: { marginLeft: 9, backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
+  delete: { color: colors.danger, fontSize: 9, fontWeight: '900' }
 });

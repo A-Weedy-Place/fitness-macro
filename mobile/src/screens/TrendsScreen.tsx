@@ -25,7 +25,7 @@ export function TrendsScreen({ state, endDate }: { state: AppState; endDate: str
   const averageBurned = series.length ? series.reduce((sum, point) => sum + point.activityCalories, 0) / series.length : 0;
 
   return <Page>
-    <ScreenHeader eyebrow="Progress intelligence" title="Trends" subtitle="Switch between one week, one month, one year, and every record you own." />
+    <ScreenHeader eyebrow="Your progress" title="Trends" subtitle="A simple view of the records you have logged." />
     <ChipRow>{([['7d', '1 week'], ['30d', '1 month'], ['1y', '1 year'], ['all', 'All time']] as const).map(([value, label]) => <Chip key={value} label={label} selected={range === value} onPress={() => setRange(value)} />)}</ChipRow>
     <View style={styles.metrics}>
       <MetricTile value={`${insights.streak}`} label="current logging streak" accent="coral" />
@@ -43,11 +43,11 @@ export function TrendsScreen({ state, endDate }: { state: AppState; endDate: str
     <Card>
       <SectionTitle title="Weight check-ins" detail={insights.weightChangeKg === null ? 'More weigh-ins needed' : `${insights.weightChangeKg > 0 ? '+' : ''}${insights.weightChangeKg.toFixed(1)} kg in range`} />
       <LineChart points={weights} target={targetWeight} />
-      <Text style={styles.chartNote}>Only days with a weigh-in create scale points. Dashed green is the seven-check-in trend; gold is your target.</Text>
+      <Text style={styles.chartNote}>Only days with a weigh-in create scale points. The dashed line is your recent trend; the marker is your target.</Text>
     </Card>
 
     <Card><SectionTitle title="Macro energy split" detail={`${insights.averageProtein.toFixed(0)}g average protein`} /><DonutChart segments={macros} centerLabel={`${insights.averageCalories.toFixed(0)}`} /></Card>
-    <Card><SectionTitle title="Logging consistency" detail={`${insights.loggedDays}/${days} days logged`} /><ConsistencyGrid points={series} /><Text style={styles.chartNote}>Dark green days were within 10% of target. Light green days contain at least one food entry.</Text></Card>
+    <Card><SectionTitle title="Logging consistency" detail={`${insights.loggedDays}/${days} days logged`} /><ConsistencyGrid points={series} /><Text style={styles.chartNote}>Darker days were within 10% of target. Lighter days contain at least one food entry.</Text></Card>
     <Card>
       <SectionTitle title="When calories are eaten" detail="categories inferred from logging time" />
       {breakdown.length ? breakdown.map((item) => { const total = breakdown.reduce((sum, candidate) => sum + candidate.value, 0); const percent = total ? item.value / total * 100 : 0; return <View key={item.label} style={styles.mealRow}><Text style={styles.mealLabel}>{item.label}</Text><View style={styles.mealTrack}><View style={[styles.mealFill, { width: `${percent}%` }]} /></View><Text style={styles.mealValue}>{percent.toFixed(0)}%</Text></View>; }) : <Text style={styles.chartNote}>Log food to see breakfast, lunch, dinner, and snack percentages.</Text>}
