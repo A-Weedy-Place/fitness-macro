@@ -3,7 +3,6 @@ import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleShe
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SecureStore from 'expo-secure-store';
-import * as Updates from 'expo-updates';
 import {
   ActivityEntry,
   AgentResolution,
@@ -88,6 +87,7 @@ function FitnessApp() {
   const [status, setStatus] = useState('All data is stored locally first.');
   const [audioConfigured, setAudioConfigured] = useState<boolean | null>(null);
   const [appAgentEnabled, setAppAgentEnabled] = useState<boolean | null>(null);
+  const [pendingTheme, setPendingTheme] = useState<AppThemeName>(activeTheme);
   const [healthConnect, setHealthConnect] = useState<HealthConnectStatus | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
@@ -290,11 +290,13 @@ function FitnessApp() {
   }
 
   function changeTheme(theme: AppThemeName) {
-    if (theme === activeTheme) return;
+    if (theme === pendingTheme) return;
     saveAppTheme(theme);
-    // The palette is read at app startup so all static native styles stay in sync.
-    // Reload the embedded update automatically — no manual restart prompt.
-    void Updates.reloadAsync().catch(() => setStatus('Theme saved. It will finish applying automatically.'));
+    setPendingTheme(theme);
+    // Screen styles are currently created when the app starts. Save the choice
+    // without kicking the owner away from Appearance; it applies on their next
+    // normal app open.
+    setStatus('Theme saved. It will apply the next time you open FitnessMacro.');
   }
 
   async function transcribeFood(uri: string) {
@@ -597,7 +599,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={activeTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

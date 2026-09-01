@@ -317,7 +317,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - The preview-environment relay was verified 2026-09-01: both `/v1/audio/status` and `/v1/agent/status` returned HTTP 200 using the APK environment (without printing any token). Integration statuses must be independently refreshed/displayed to avoid false “unavailable” messages.
 - Android navigation controls remain visible and all application content reserves safe-area space above them. Keyboard mode is resize so the Assistant composer remains above the Android keyboard.
 - Keep the main Goals tab compact; optional adaptive-maintenance and flexible-plan rationale is in You → Goals & daily plan. Use device time by default, with Pakistan UTC+5 selectable.
-- Visual design direction: calm, neutral, compact cards; no coloured background blobs, macro-colour overtones, oversized AI tab, or “AI dashboard” visual treatment. Themes reload automatically instead of asking the owner for a manual restart.
+- Visual design direction: preserve the owner’s original theme palettes, retain compact cards and equal tab icons, and avoid special multicolour metric-card/AI-dashboard treatments. Theme selection saves in place without a forced relaunch and applies on the next normal app open.
 - Voice is compact record → ephemeral upload → editable transcript. Show live audio-meter bars/timer while recording; never retain raw audio.
 - Offline catalog is 108 foods/ingredients including regional staples; it merges into existing phone data. Search has aliases and related results, e.g. `mash ke daal` returns mash/urad/dal. Starter nutrition values are editable estimates.
 - Health Connect is a free optional Android integration and needs the preview/dev APK, not Expo Go.
