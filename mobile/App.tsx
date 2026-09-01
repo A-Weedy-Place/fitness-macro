@@ -296,7 +296,7 @@ function FitnessApp() {
     // Screen styles are currently created when the app starts. Save the choice
     // without kicking the owner away from Appearance; it applies on their next
     // normal app open.
-    setStatus('Theme saved. It will apply the next time you open FitnessMacro.');
+    setStatus('Theme saved. It will apply the next time you open Weed Fitness.');
   }
 
   async function transcribeFood(uri: string) {
@@ -308,8 +308,12 @@ function FitnessApp() {
   async function refreshHealthConnect(requestAccess: boolean) {
     const result = await syncHealthConnect(requestAccess);
     setHealthConnect(result.status);
-    if (result.activities.length || result.weights.length) setState((current) => {
-      const withActivities = result.activities.reduce((next, activity) => upsertActivity(next, activity), current);
+    if (result.activities.length || result.weights.length || result.replaceLegacyActivities) setState((current) => {
+      // v0.3 used one generic row per calorie record. Newer builds import
+      // tracker sessions instead, so clear only those legacy imported rows to
+      // prevent a single Strava workout being counted twice.
+      const withoutLegacyHealthRows = result.replaceLegacyActivities ? { ...current, activities: current.activities.filter((activity) => !activity.id.startsWith('health_strava_')) } : current;
+      const withActivities = result.activities.reduce((next, activity) => upsertActivity(next, activity), withoutLegacyHealthRows);
       return result.weights.reduce((next, weight) => {
         const existing = next.weights.find((item) => item.date === weight.date);
         // A deliberate in-app check-in wins over an imported source for that day.
@@ -499,7 +503,7 @@ function FitnessApp() {
       setState(restorePortableBackup(text));
       setStatus('Portable backup restored successfully.');
     } catch {
-      Alert.alert('Backup not recognized', 'Paste a complete FitnessMacro JSON backup or PC-agent export.');
+      Alert.alert('Backup not recognized', 'Paste a complete Weed Fitness JSON backup or legacy export.');
     }
   }
 

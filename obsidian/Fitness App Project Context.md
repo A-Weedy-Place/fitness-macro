@@ -322,3 +322,20 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Offline catalog is 108 foods/ingredients including regional staples; it merges into existing phone data. Search has aliases and related results, e.g. `mash ke daal` returns mash/urad/dal. Starter nutrition values are editable estimates.
 - Health Connect is a free optional Android integration and needs the preview/dev APK, not Expo Go.
 - At this checkpoint TypeScript passes and all 13 mobile core tests pass. The next owner artifact is a new EAS preview APK after this UI/reliability stage.
+
+### Strava activity import decision — researched 2026-09-01
+
+- Preferred free path: **Strava Android → Health Connect → FitnessMacro**. Strava officially writes time, distance, and calories for GPS-based activities to Health Connect. FitnessMacro can read the resulting `ActiveCaloriesBurned` records (with Total Calories only as a fallback) without a Strava API application, API key, client secret, or Strava subscription.
+- FitnessMacro's present sync runs on app foreground/open after Health Connect permission. Background automatic reads are possible later only with Health Connect Background Read permission and scheduled Android work.
+- A future native polish pass should import exercise sessions as well as calories, keep the Health Connect source attribution/record ID, dedupe robustly, and display workout type/name/distance rather than generic calorie intervals.
+- Do not choose direct Strava API for the zero-budget product: it needs OAuth, server-held refresh credentials and a webhook/callback; as of Sep 2026, creating/using a Standard Tier API application requires a Strava subscription. Current API policy also limits agent-mediated/intermediary use.
+
+## Current product source of truth — Health Connect and branding update, 2026-09-01
+
+- Public Android name: **Weed Fitness**. Preserve the EAS slug and Android package `fitness-macro` / `com.ashar.fitnessmacro`, so this is an upgrade rather than a data-losing second app. The launcher asset is `mobile/assets/weed-fitness-icon.png`.
+- Free activity route: **Strava Android → Health Connect → Weed Fitness**. Do not reintroduce direct Strava API/OAuth, a subscription, a PC, or a desktop service.
+- The Android Health Connect scopes are `ExerciseSession`, `ActiveCaloriesBurned`, `Distance`, and `Weight`. An owner updating from an earlier APK must tap **You → Connections → Update access** once and allow the added workout/distance scopes.
+- Foreground/on-open sync covers 30 days. It reads paginated workout sessions first and retains tracker source, title/type, duration, distance, and active calories. Near-identical copies are deduplicated with Strava preferred; associated calorie intervals are excluded; only non-session activity is grouped into source-labelled daily summaries. This avoids double-counting a Strava workout.
+- Do not use `TotalCaloriesBurned` as exercise burn: it includes basal energy. Display sessions even when a tracker exposes no active-calorie record. Keep manual activity and deliberate in-app weight check-ins higher priority than imports.
+- Health Connect is Android-only and free, and requires the preview APK rather than Expo Go. Background sync and older-than-default 30-day history need an explicit, later privacy-reviewed permission/scheduling stage.
+- Validation: mobile type-check, **13/13** core tests, and Expo configuration resolve cleanly. Next deliverable: new preview APK from this revision.

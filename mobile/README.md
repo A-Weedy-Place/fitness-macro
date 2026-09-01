@@ -1,4 +1,4 @@
-# FitnessMacro mobile app
+# Weed Fitness mobile app
 
 Expo SDK 57 / React Native 0.86 local-first nutrition journal.
 

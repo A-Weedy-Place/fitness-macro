@@ -27,7 +27,7 @@ export function AccountLockScreen({ onUnlock }: { onUnlock: (pin: string) => Pro
 
   return <View style={styles.page}>
     <View style={styles.mark}><Ionicons name="shield-checkmark-outline" size={32} color={colors.white} /></View>
-    <Text style={styles.title}>FitnessMacro is locked</Text>
+    <Text style={styles.title}>Weed Fitness is locked</Text>
     <Text style={styles.detail}>This is a private, device-only PIN. It is not an online account and does not require a subscription.</Text>
     <View style={styles.form}>
       <Field label="Local PIN" value={pin} onChangeText={(value) => { setPin(value.replace(/\D/g, '')); setMessage(''); }} keyboardType="number-pad" secureTextEntry maxLength={8} autoFocus />

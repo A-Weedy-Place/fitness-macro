@@ -1,6 +1,7 @@
 export default {
   expo: {
-    name: 'FitnessMacro',
+    name: 'Weed Fitness',
+    icon: './assets/weed-fitness-icon.png',
     slug: 'fitness-macro',
     version: '0.3.0',
     orientation: 'portrait',
@@ -31,7 +32,7 @@ export default {
       [
         'expo-image-picker',
         {
-          photosPermission: 'Allow FitnessMacro to use a profile photo saved on this device.'
+          photosPermission: 'Allow Weed Fitness to use a profile photo saved on this device.'
         }
       ],
       'expo-secure-store',
@@ -49,13 +50,13 @@ export default {
       [
         'expo-audio',
         {
-          microphonePermission: 'Allow FitnessMacro to record food descriptions for private transcription.'
+          microphonePermission: 'Allow Weed Fitness to record food descriptions for private transcription.'
         }
       ],
       [
         'expo-camera',
         {
-          cameraPermission: 'Allow FitnessMacro to scan food barcodes.',
+          cameraPermission: 'Allow Weed Fitness to scan food barcodes.',
           recordAudioAndroid: false,
           barcodeScannerEnabled: true
         }
@@ -69,11 +70,12 @@ export default {
       softwareKeyboardLayoutMode: 'resize',
       // These are declared in the Android manifest so the Health Connect
       // permission screen can appear in a standalone APK. The app requests
-      // only these three read scopes at runtime.
+      // only these read scopes at runtime.
       permissions: [
         'android.permission.health.READ_WEIGHT',
+        'android.permission.health.READ_EXERCISE',
         'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
-        'android.permission.health.READ_TOTAL_CALORIES_BURNED'
+        'android.permission.health.READ_DISTANCE'
       ]
     }
   }

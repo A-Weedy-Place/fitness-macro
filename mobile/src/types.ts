@@ -65,6 +65,8 @@ export interface ActivityEntry {
   date: string;
   name: string;
   source: 'strava' | 'health_connect' | 'manual';
+  /** The originating tracker when this was imported through Health Connect. */
+  importSource?: string;
   type: string;
   durationMinutes: number;
   distanceMeters?: number;
