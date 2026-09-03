@@ -66,12 +66,10 @@ export default {
       ]
     ],
     ios: {
-      supportsTablet: true,
-      buildNumber: '1'
+      supportsTablet: true
     },
     android: {
       package: 'com.ashar.fitnessmacro',
-      versionCode: 1,
       softwareKeyboardLayoutMode: 'resize',
       // These are declared in the Android manifest so the Health Connect
       // permission screen can appear in a standalone APK. The app requests
