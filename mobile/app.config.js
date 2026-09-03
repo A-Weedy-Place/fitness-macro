@@ -3,16 +3,17 @@ export default {
     name: 'Weed Fitness',
     icon: './assets/weed-fitness-icon.png',
     slug: 'fitness-macro',
-    version: '0.3.0',
+    version: '0.1.0', // x-release-please-version
     orientation: 'portrait',
     jsEngine: 'hermes',
     updates: {
       enabled: true,
       url: 'https://u.expo.dev/714cf37d-459a-4408-b025-1334f0bfc779',
-      checkAutomatically: 'ON_LOAD'
+      checkAutomatically: 'ON_LOAD',
+      fallbackToCacheTimeout: 0
     },
     runtimeVersion: {
-      policy: 'sdkVersion'
+      policy: 'appVersion'
     },
     extra: {
       eas: {
@@ -20,6 +21,8 @@ export default {
       }
     },
     plugins: [
+      'expo-font',
+      'expo-asset',
       'react-native-health-connect',
       [
         'expo-navigation-bar',

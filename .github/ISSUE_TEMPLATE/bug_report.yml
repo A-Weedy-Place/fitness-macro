@@ -1,0 +1,37 @@
+name: Bug report
+description: Report something in Weed Fitness that is broken or behaving incorrectly.
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open…
+        2. Tap…
+        3. See…
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Find this under You → Updates.
+      placeholder: v0.1.0 (1)
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Pixel 8, Android 16
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots or extra context

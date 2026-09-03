@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+    groups:
+      expo:
+        patterns:
+          - expo
+          - expo-*
+          - "@expo/*"
+      development:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /relay
+    schedule:
+      interval: weekly
+    groups:
+      relay-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

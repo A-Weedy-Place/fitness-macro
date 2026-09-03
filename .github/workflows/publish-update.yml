@@ -1,0 +1,47 @@
+name: Publish app update
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Update channel to publish to
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+      message:
+        description: Short description shown in the EAS update history
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Publish ${{ inputs.channel }} update
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Set up Expo and EAS
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Publish compatible update
+        run: eas update --channel "${{ inputs.channel }}" --environment "${{ inputs.channel }}" --message "${{ inputs.message }}" --non-interactive
