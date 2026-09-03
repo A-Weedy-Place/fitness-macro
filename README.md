@@ -24,6 +24,10 @@ FitnessMacro APK → private Cloudflare Worker → Groq
 
 An installable Android preview APK is built with EAS. It already contains the relay address and a rotatable private-test access token; the tester does not enter a key or connect to a PC. See [standalone testing](docs/standalone-testing.md).
 
+## Development and releases
+
+Changes are developed through issues and pull requests, checked by GitHub Actions, and released with Semantic Versioning. Installed builds receive compatible JavaScript and asset updates through EAS Update; native changes are shipped as a new signed APK. See [releases and in-app updates](docs/releases-and-updates.md) and [contributing](CONTRIBUTING.md).
+
 ## Security boundary
 
 The Groq key is never committed or bundled in the APK. The current private test build contains a separate relay access token, which is rotatable but extractable from an APK; it protects against casual abuse only. Add real account/device authentication before broader distribution.
