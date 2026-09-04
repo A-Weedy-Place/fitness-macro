@@ -7,6 +7,14 @@ on:
         description: Existing GitHub release tag to build, for example v0.1.0
         required: true
         type: string
+      profile:
+        description: EAS build profile; preview includes private test-only telemetry
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
 
 permissions:
   contents: write
@@ -15,7 +23,7 @@ jobs:
   android:
     name: Build and attach Android APK
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ inputs.profile }}
     defaults:
       run:
         working-directory: mobile
@@ -47,15 +55,15 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Build signed APK
         shell: bash
-        run: eas build --platform android --profile production --non-interactive --wait --json > "$RUNNER_TEMP/eas-build.json"
+        run: eas build --platform android --profile "${{ inputs.profile }}" --non-interactive --wait --json > "$RUNNER_TEMP/eas-build.json"
       - name: Download APK from EAS
         shell: bash
         run: |
           apk_url="$(jq -r '.[0].artifacts.buildUrl' "$RUNNER_TEMP/eas-build.json")"
           test -n "$apk_url" && test "$apk_url" != "null"
-          curl --fail --location "$apk_url" --output "$RUNNER_TEMP/Weed-Fitness-${{ inputs.tag }}.apk"
+          curl --fail --location "$apk_url" --output "$RUNNER_TEMP/Weed-Fitness-${{ inputs.tag }}-${{ inputs.profile }}.apk"
       - name: Attach APK to GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" "$RUNNER_TEMP/Weed-Fitness-${{ inputs.tag }}.apk" --clobber
+        run: gh release upload "${{ inputs.tag }}" "$RUNNER_TEMP/Weed-Fitness-${{ inputs.tag }}-${{ inputs.profile }}.apk" --clobber
