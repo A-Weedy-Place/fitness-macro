@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AssistantPlan } from '../types';
+import { recordTestTelemetry } from './testTelemetry';
 
 const KEY = 'weed-fitness-ai-diagnostics-v1';
 const MAX_EVENTS = 120;
@@ -31,6 +32,7 @@ export function diagnosticActions(plan: AssistantPlan | undefined): AiDiagnostic
 
 export function recordAiDiagnostic(input: Omit<AiDiagnosticEvent, 'id' | 'at' | 'command' | 'reply' | 'error'> & Pick<AiDiagnosticEvent, 'command' | 'reply' | 'error'>): void {
   const event: AiDiagnosticEvent = { ...input, id: `diag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, at: new Date().toISOString(), command: clip(input.command), reply: clip(input.reply), error: clip(input.error, 500) };
+  recordTestTelemetry('ai_diagnostic', event);
   pendingWrite = pendingWrite.then(async () => {
     try {
       const stored = await AsyncStorage.getItem(KEY);

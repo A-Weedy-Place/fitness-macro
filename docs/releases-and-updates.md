@@ -26,6 +26,10 @@ Use this after changing native dependencies, plugins, permissions, native config
 
 The first tracked release is `v0.1.0`. EAS remotely increments Android's internal `versionCode`; the human-facing version remains controlled by the release PR.
 
+## Required delivery sequence
+
+Use this sequence for every owner test stage: GitHub issue → `codex/issue-<number>-...` branch → tested pull request that closes the issue → merge → Release Please version/changelog pull request → merge/tag/GitHub Release → release workflow attaches the signed APK. Keep the direct EAS link only as a temporary convenience; the GitHub Release is the permanent download record.
+
 ## Required repository secret
 
 Both delivery workflows require an Expo access token stored as the GitHub Actions secret `EXPO_TOKEN`. Never place it in source code, an issue, a PR, or a workflow file.

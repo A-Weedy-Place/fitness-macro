@@ -52,6 +52,14 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Themes use a safe static-style reload for complete palette changes. A stored return marker puts the owner back in **You → Appearance & display**, never Today, after selecting a theme. A future dynamic-token refactor can remove the short reload.
 - Stage validation: mobile and relay TypeScript pass; 14 mobile core tests include the cup-to-ml regression. A new APK is required for the expanded native gallery permission wording.
 
+## Test telemetry and release-process correction — 2026-09-04
+
+- Delivery is now a strict owner workflow: a GitHub issue defines each change; work is done on `codex/issue-<number>-...`; a tested PR closes that issue; Release Please creates the version/changelog PR; the signed Android APK is attached to the resulting GitHub Release. A direct Expo artifact is only a temporary convenience, never the permanent release record. This is documented in `CONTRIBUTING.md` and `docs/releases-and-updates.md`.
+- The previous startup/diagnostics build was pushed as source commits `1034328` and `cc18182`, but was not run through that issue/PR/release path. This was a process error, not an unpushed code change; its Expo preview APK was not a GitHub release asset. The current correction is tracked by GitHub issue #12 on branch `codex/issue-12-test-telemetry`.
+- While the project is private testing only, preview APKs automatically queue and upload evidence needed to reproduce app/agent behavior: navigation, important state commits, diary/profile/food/recipe/weight/activity/goal snapshots, AI commands and replies, actions, and errors. Raw audio, API keys, relay tokens, local PINs, device photo files, and local file paths are excluded. Offline upload failures never block normal app behavior.
+- The private Cloudflare D1 database `weed-fitness-test-telemetry` (APAC, ID `75e9935e-1f88-4f09-b413-3dffbd1de1e4`) receives events only through the protected Worker route. The server automatically removes records older than 90 days. **You → Backup & restore → Clear this phone's cloud test data** deletes that test phone’s remote telemetry; new test activity begins collecting again automatically.
+- The feature is hard-gated behind `EXPO_PUBLIC_TEST_TELEMETRY=enabled`, configured only in Expo's `preview` environment. It is deliberately absent from production and must be removed—Worker routes, D1 binding, migration, database, and build flag—before any public/end-user release. The owner can inspect collected evidence through authenticated Wrangler, as documented in `docs/test-telemetry.md`.
+
 ## Startup and private AI diagnostics stage — 2026-09-04
 
 - Native startup now shows the Weed Fitness logo. Once JavaScript loads, a warm launch screen replaces the temporary empty root with a subtle rotating leaf and local-data message; it does not contact a server.

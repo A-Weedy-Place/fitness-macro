@@ -16,10 +16,10 @@ import { AppUpdatePanel } from '../components/AppUpdatePanel';
 
 type Panel = 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'updates' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, initialPanel, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onExportDiagnostics, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
+export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, initialPanel, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onExportDiagnostics, testingTelemetryEnabled, onClearTestTelemetry, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations }: {
   state: AppState; date: string; status: string; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
   initialPanel?: Panel; activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>;
-  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => string; onExportDiagnostics: () => Promise<string>; onImport: (text: string) => void;
+  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => string; onExportDiagnostics: () => Promise<string>; testingTelemetryEnabled: boolean; onClearTestTelemetry: () => Promise<void>; onImport: (text: string) => void;
   onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void;
 }) {
   const profile = state.profile;
@@ -120,6 +120,14 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
 
   async function exportBackup() { const text = onExport(); setBackupText(text); await Share.share({ title: `Weed Fitness backup ${date}`, message: text }); }
   async function exportDiagnostics() { const text = await onExportDiagnostics(); await Share.share({ title: `Weed Fitness AI diagnostics ${date}`, message: text }); }
+  async function clearTestTelemetry() {
+    try {
+      await onClearTestTelemetry();
+      Alert.alert('Test data cleared', 'This phone\'s remote test telemetry and unsent queue were deleted. New testing activity will begin collecting again automatically.');
+    } catch {
+      Alert.alert('Could not clear test data', 'Keep this phone online and try again.');
+    }
+  }
   async function savePin() {
     if (!/^\d{4,8}$/.test(pin)) return Alert.alert('Choose a PIN', 'Use 4 to 8 digits.');
     if (pin !== confirmPin) return Alert.alert('PINs do not match', 'Enter the same PIN twice.');
@@ -178,7 +186,34 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
 
     {panel === 'security' ? <><SectionTitle title="Local app lock" detail="optional device-only protection" /><Card><Text style={styles.explainer}>A PIN protects the app after it is sent to the background. The PIN is stored in your phone’s encrypted storage, not in a cloud account.</Text>{pinEnabled ? <><Text style={styles.ready}>A local PIN is enabled.</Text><Button label="Remove local PIN" tone="danger" onPress={() => Alert.alert('Remove local PIN?', 'Anyone with this phone will be able to open Weed Fitness.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove PIN', style: 'destructive', onPress: () => void onSetLocalPin(null).then(() => setPanel(null)) }])} /></> : <><Field label="Choose 4–8 digit PIN" value={pin} onChangeText={(value) => setPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Field label="Confirm PIN" value={confirmPin} onChangeText={(value) => setConfirmPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={8} /><Button label="Enable local PIN" onPress={() => void savePin()} /></>}</Card></> : null}
 
-    {panel === 'data' ? <><SectionTitle title="Backup & restore" detail="you control the data" /><Card><Text style={styles.explainer}>A portable JSON backup includes your profile, recipes, foods, diary, weights, activities, and targets. It never includes credentials or raw audio.</Text><Button label="Share portable backup" onPress={() => void exportBackup()} /><View style={styles.smallGap} /><Button label={showRestore ? 'Hide restore box' : 'Restore backup'} tone="secondary" onPress={() => setShowRestore(!showRestore)} />{showRestore ? <><Field label="Paste complete backup JSON" value={backupText} onChangeText={setBackupText} multiline autoCapitalize="none" /><Button label="Import and replace local data" tone="danger" onPress={() => Alert.alert('Replace local data?', 'The pasted backup will become the active local account.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Import', style: 'destructive', onPress: () => onImport(backupText) }])} /></> : null}<View style={styles.divider} /><Text style={styles.rowTitle}>AI diagnostics</Text><Text style={styles.systemDetail}>This phone keeps the last 120 AI commands, replies, proposed actions, and errors so you can deliberately share a small report for debugging. It never includes API keys or raw audio, and nothing is sent automatically.</Text><Button label="Share AI diagnostics" tone="secondary" onPress={() => void exportDiagnostics()} /><View style={styles.divider} /><Text style={styles.rowTitle}>Stored locally on this phone</Text><Text style={styles.systemDetail}>{status}</Text><View style={styles.smallGap} /><Button label="Load demo history" tone="ghost" onPress={() => Alert.alert('Load demo history?', 'This refreshes 60 days of demonstration records.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Load', onPress: onLoadDemo }])} /></Card></> : null}
+    {panel === 'data' ? <>
+      <SectionTitle title="Backup & restore" detail="you control the data" />
+      <Card>
+        <Text style={styles.explainer}>A portable JSON backup includes your profile, recipes, foods, diary, weights, activities, and targets. It never includes credentials or raw audio.</Text>
+        <Button label="Share portable backup" onPress={() => void exportBackup()} />
+        <View style={styles.smallGap} />
+        <Button label={showRestore ? 'Hide restore box' : 'Restore backup'} tone="secondary" onPress={() => setShowRestore(!showRestore)} />
+        {showRestore ? <>
+          <Field label="Paste complete backup JSON" value={backupText} onChangeText={setBackupText} multiline autoCapitalize="none" />
+          <Button label="Import and replace local data" tone="danger" onPress={() => Alert.alert('Replace local data?', 'The pasted backup will become the active local account.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Import', style: 'destructive', onPress: () => onImport(backupText) }])} />
+        </> : null}
+        {testingTelemetryEnabled ? <>
+          <View style={styles.divider} />
+          <Text style={styles.rowTitle}>Private test telemetry is active</Text>
+          <Text style={styles.systemDetail}>This preview build automatically sends app interactions, AI commands and replies, action outcomes, errors, and your test diary snapshot to the owner’s private debugging database. It never sends API keys or raw audio. This is only for your pre-product testing and will be removed before public release.</Text>
+          <Button label="Clear this phone's cloud test data" tone="secondary" onPress={() => Alert.alert('Clear cloud test data?', 'This removes the remote telemetry for this test phone. New activity will begin collecting again automatically.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => void clearTestTelemetry() }])} />
+        </> : null}
+        <View style={styles.divider} />
+        <Text style={styles.rowTitle}>Manual AI diagnostics</Text>
+        <Text style={styles.systemDetail}>The last 120 local AI events can still be shared as JSON if you want to inspect them yourself.</Text>
+        <Button label="Share AI diagnostics" tone="secondary" onPress={() => void exportDiagnostics()} />
+        <View style={styles.divider} />
+        <Text style={styles.rowTitle}>Stored locally on this phone</Text>
+        <Text style={styles.systemDetail}>{status}</Text>
+        <View style={styles.smallGap} />
+        <Button label="Load demo history" tone="ghost" onPress={() => Alert.alert('Load demo history?', 'This refreshes 60 days of demonstration records.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Load', onPress: onLoadDemo }])} />
+      </Card>
+    </> : null}
   </Page>;
 }
 

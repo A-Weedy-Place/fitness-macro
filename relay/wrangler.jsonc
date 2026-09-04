@@ -6,5 +6,12 @@
   "workers_dev": true,
   "observability": {
     "enabled": true
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "TEST_TELEMETRY",
+      "database_name": "weed-fitness-test-telemetry",
+      "database_id": "75e9935e-1f88-4f09-b413-3dffbd1de1e4"
+    }
+  ]
 }
