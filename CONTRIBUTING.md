@@ -12,6 +12,19 @@ Thanks for helping improve the project. Changes should stay focused, testable, a
 6. Address failures and review notes in the same pull request.
 7. Squash-merge after CI passes.
 
+## Owner delivery contract
+
+Every product change follows this traceable path, including work done by Codex:
+
+1. A GitHub issue defines the problem, acceptance checks, and whether it changes the native app.
+2. Work happens on `codex/issue-<number>-short-description`, never directly on `main`.
+3. The branch is pushed and a pull request links the issue with `Closes #<number>`.
+4. GitHub Actions must pass before merge. The PR contains the tests performed and whether an EAS Update or new APK is needed.
+5. A Conventional Commit PR title lets Release Please prepare the version/changelog PR. Merge it to create the immutable GitHub tag and Release.
+6. For native changes, run **Build release APK** for that tag. The workflow builds the exact tag, downloads the signed APK from EAS, and attaches it to the matching GitHub Release. For compatible JavaScript/assets, publish a preview EAS Update first, test it, then promote the same commit.
+
+Do not call an Expo artifact alone a release. The GitHub Release is the permanent release record and carries the APK when a new native build is required.
+
 ## Local checks
 
 ```powershell

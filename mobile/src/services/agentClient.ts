@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import { AssistantPlan, DailyGoal, FoodItem, UserProfile } from '../types';
+import type { TestTelemetryEvent } from '../logic/testTelemetry';
 
 // This public HTTPS address identifies the relay, not a secret. The Groq key stays only in Cloudflare.
 const RELAY_BASE_URL = 'https://fitness-macro-relay.fitness-macro-relay.workers.dev';
@@ -108,4 +109,12 @@ export async function agentStatus(): Promise<{
   foodAgent: { enabled: boolean; provider: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
 }> {
   return request('/v1/agent/status');
+}
+
+export async function postTestTelemetry(deviceId: string, events: TestTelemetryEvent[]): Promise<void> {
+  await request('/v1/test-telemetry', { method: 'POST', body: JSON.stringify({ deviceId, events }) });
+}
+
+export async function resetTestTelemetry(deviceId: string): Promise<void> {
+  await request('/v1/test-telemetry/reset', { method: 'POST', body: JSON.stringify({ deviceId }) });
 }

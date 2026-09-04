@@ -4,6 +4,8 @@ import { assistantPlanSchema, foodResolutionSchema, nutritionAdviceSchema } from
 interface Env {
   GROQ_API_KEY?: string;
   APP_ACCESS_TOKEN?: string;
+  /** Bound only on the private testing relay; never used by a public build. */
+  TEST_TELEMETRY?: D1Database;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -17,9 +19,11 @@ const jsonHeaders = {
 };
 const encoder = new TextEncoder();
 const requestWindows = new Map<string, number[]>();
-const MAX_JSON_BYTES = 100_000;
+const telemetryRequestWindows = new Map<string, number[]>();
+const MAX_JSON_BYTES = 300_000;
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_REQUESTS_PER_HOUR = 60;
+const MAX_TELEMETRY_REQUESTS_PER_HOUR = 240;
 
 const programSources = [
   { title: 'WHO: What are healthy diets?', url: 'https://www.who.int/publications/i/item/9789240101876' },
@@ -99,16 +103,18 @@ function validTime(value: unknown, fallback: string): string {
   return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
 }
 
-function requestAllowed(request: Request, env: Env): Response | null {
+function requestAllowed(request: Request, env: Env, telemetry = false): Response | null {
   const configuredToken = env.APP_ACCESS_TOKEN?.trim();
   const receivedToken = request.headers.get('x-fitnessmacro-app-token')?.trim();
   if (!configuredToken || !receivedToken || receivedToken !== configuredToken) return reject(401, 'unauthorized_app');
 
   const now = Date.now();
-  const active = (requestWindows.get(receivedToken) || []).filter((time) => now - time < 60 * 60 * 1_000);
-  if (active.length >= MAX_REQUESTS_PER_HOUR) return reject(429, 'relay_hourly_limit_reached');
+  const windows = telemetry ? telemetryRequestWindows : requestWindows;
+  const limit = telemetry ? MAX_TELEMETRY_REQUESTS_PER_HOUR : MAX_REQUESTS_PER_HOUR;
+  const active = (windows.get(receivedToken) || []).filter((time) => now - time < 60 * 60 * 1_000);
+  if (active.length >= limit) return reject(429, telemetry ? 'telemetry_hourly_limit_reached' : 'relay_hourly_limit_reached');
   active.push(now);
-  requestWindows.set(receivedToken, active);
+  windows.set(receivedToken, active);
   return null;
 }
 
@@ -121,6 +127,52 @@ async function readJson(request: Request): Promise<JsonRecord> {
   const object = asRecord(parsed);
   if (!object) throw new Error('invalid_json');
   return object;
+}
+
+interface TelemetryInput {
+  id: string;
+  at: string;
+  type: string;
+  payload: unknown;
+}
+
+function telemetryEvents(value: unknown): TelemetryInput[] {
+  const input = asRecord(value);
+  const entries = Array.isArray(input?.events) ? input.events : [];
+  if (!entries.length || entries.length > 12) throw new Error('invalid_request');
+  return entries.map(asRecord).map((event) => {
+    const id = boundedString(event?.id, 120);
+    const at = boundedString(event?.at, 80);
+    const type = boundedString(event?.type, 80);
+    if (!id || !at || !type) throw new Error('invalid_request');
+    const payload = event?.payload ?? null;
+    const serialized = JSON.stringify(payload);
+    if (!serialized || serialized.length > 250_000) throw new Error('request_too_large');
+    return { id, at, type, payload };
+  });
+}
+
+async function storeTestTelemetry(input: JsonRecord, env: Env): Promise<JsonRecord> {
+  if (!env.TEST_TELEMETRY) throw new Error('telemetry_unavailable');
+  const deviceId = boundedString(input.deviceId, 120);
+  if (!deviceId || !/^test_device_[a-z0-9_]+$/i.test(deviceId)) throw new Error('invalid_request');
+  const events = telemetryEvents(input);
+  const receivedAt = new Date().toISOString();
+  await env.TEST_TELEMETRY.batch([
+    env.TEST_TELEMETRY.prepare("DELETE FROM test_telemetry_events WHERE received_at < datetime('now', '-90 days')"),
+    ...events.map((event) => env.TEST_TELEMETRY!.prepare(
+    'INSERT OR IGNORE INTO test_telemetry_events (event_id, device_id, occurred_at, received_at, event_type, payload_json) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(event.id, deviceId, event.at, receivedAt, event.type, JSON.stringify(event.payload)))
+  ]);
+  return { stored: events.length };
+}
+
+async function resetTestTelemetry(input: JsonRecord, env: Env): Promise<JsonRecord> {
+  if (!env.TEST_TELEMETRY) throw new Error('telemetry_unavailable');
+  const deviceId = boundedString(input.deviceId, 120);
+  if (!deviceId || !/^test_device_[a-z0-9_]+$/i.test(deviceId)) throw new Error('invalid_request');
+  await env.TEST_TELEMETRY.prepare('DELETE FROM test_telemetry_events WHERE device_id = ?').bind(deviceId).run();
+  return { deleted: true };
 }
 
 function relayError(error: unknown): Response {
@@ -409,9 +461,9 @@ async function transcribe(request: Request, env: Env): Promise<JsonRecord> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders });
-    const authorizationError = requestAllowed(request, env);
-    if (authorizationError) return authorizationError;
     const path = new URL(request.url).pathname;
+    const authorizationError = requestAllowed(request, env, path === '/v1/test-telemetry' || path === '/v1/test-telemetry/reset');
+    if (authorizationError) return authorizationError;
     try {
       if (request.method === 'GET' && path === '/v1/audio/status') return respond(200, { configured: Boolean(env.GROQ_API_KEY?.trim()), retention: 'none', provider: 'groq', mode: 'hosted_relay', model: 'whisper-large-v3-turbo' });
       if (request.method === 'GET' && path === '/v1/agent/status') return respond(200, { appAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', busy: false, timeoutSeconds: 45 }, foodAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', liveSearch: false, busy: false, timeoutSeconds: 45 } });
@@ -423,6 +475,8 @@ export default {
       }
       if (request.method === 'POST' && path === '/v1/agent/command') return respond(200, await resolveFood(await readJson(request), env));
       if (request.method === 'POST' && path === '/v1/goals/recommendation') return respond(200, await nutritionProgram(await readJson(request), env));
+      if (request.method === 'POST' && path === '/v1/test-telemetry') return respond(200, await storeTestTelemetry(await readJson(request), env));
+      if (request.method === 'POST' && path === '/v1/test-telemetry/reset') return respond(200, await resetTestTelemetry(await readJson(request), env));
       if (request.method === 'GET' && path === '/v1/foods/search') {
         const query = boundedString(new URL(request.url).searchParams.get('q'), 120); if (!query) throw new Error('invalid_request');
         const items = await searchOpenFoodFacts(query); return respond(200, { query, items, fromCache: false, cachedCount: 0 });

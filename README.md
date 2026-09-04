@@ -12,7 +12,7 @@ FitnessMacro APK → private Cloudflare Worker → Groq
 - Speech-to-text: Groq `whisper-large-v3-turbo`.
 - Food and action planning: Groq `openai/gpt-oss-120b`.
 - Safe deterministic target calculation remains in the app; AI only proposes confirmation-gated actions and meal structure.
-- The Worker does not persist raw audio, diary entries, recipes, or profile data.
+- Normal app operation does not persist raw audio, diary entries, recipes, or profile data in the Worker. Owner-authorised preview builds temporarily send diagnostic telemetry to a private Cloudflare D1 database; see [private test telemetry](docs/test-telemetry.md). This facility is disabled for production and is scheduled for removal before any public release.
 
 ## Repository layout
 

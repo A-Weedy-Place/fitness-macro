@@ -64,6 +64,7 @@ import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect } fro
 import { buildDailySeries } from './src/logic/analytics';
 import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
 import { diagnosticActions, exportAiDiagnostics, recordAiDiagnostic } from './src/logic/diagnostics';
+import { clearRemoteTestTelemetry, flushTestTelemetry, recordTestTelemetry, testingTelemetryEnabled } from './src/logic/testTelemetry';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -71,6 +72,22 @@ function makeId(prefix: string) {
 
 function now() {
   return new Date().toISOString();
+}
+
+/** Test-only copy sent to the private diagnostic store. Device-only photo paths are useless remotely. */
+function testingSnapshot(state: AppState) {
+  return {
+    version: state.version,
+    profile: state.profile ? { ...state.profile, profilePhotoUri: undefined } : undefined,
+    foods: state.foods.map(({ imageUri: _imageUri, ...food }) => food),
+    entries: state.entries,
+    weights: state.weights,
+    activities: state.activities,
+    goals: state.goals,
+    plans: state.plans,
+    recipes: state.recipes,
+    nutritionProgram: state.nutritionProgram
+  };
 }
 
 const LOCAL_PIN_KEY = 'fitness-macro-local-pin-v1';
@@ -105,6 +122,7 @@ function FitnessApp() {
       setState(loaded);
       setDate(today(loaded.profile?.timeZone));
       setHydrated(true);
+      recordTestTelemetry('app_loaded', { hasProfile: Boolean(loaded.profile?.onboardingComplete), localSchema: loaded.version });
     });
   }, []);
 
@@ -121,7 +139,9 @@ function FitnessApp() {
   }, []);
 
   useEffect(() => {
-    if (hydrated) void saveState(state);
+    if (!hydrated) return;
+    void saveState(state);
+    recordTestTelemetry('state_snapshot', { snapshot: testingSnapshot(state) });
   }, [state, hydrated]);
 
   useEffect(() => {
@@ -132,7 +152,11 @@ function FitnessApp() {
     if (!hydrated) return;
     void refreshHealthConnect(false);
     const subscription = NativeAppState.addEventListener('change', (next) => {
-      if (next === 'active') void refreshHealthConnect(false);
+      if (next === 'active') {
+        recordTestTelemetry('app_foregrounded');
+        void flushTestTelemetry();
+        void refreshHealthConnect(false);
+      }
       else if (pinEnabled) setUnlocked(false);
     });
     return () => subscription.remove();
@@ -157,6 +181,7 @@ function FitnessApp() {
   }, [hydrated, state.profile, state.entries, state.weights, state.foods, state.activities, state.goals]);
 
   function changeTab(tab: TabKey) {
+    recordTestTelemetry('navigation', { destination: tab });
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveTab(tab);
   }
@@ -164,6 +189,7 @@ function FitnessApp() {
   async function commit(nextState: AppState, success: string) {
     setState(nextState);
     setStatus(success);
+    recordTestTelemetry('state_committed', { message: success });
   }
 
   async function addPlate(items: PlateItem[], eatenAt: string, logDate = date) {
@@ -636,15 +662,18 @@ function FitnessApp() {
   }
 
   function changeDate(offset: number | 'today') {
+    recordTestTelemetry('date_navigation', { offset });
     setDate(offset === 'today' ? today(state.profile?.timeZone) : shiftDate(date, offset));
   }
 
   function openLibrary(time?: string) {
+    recordTestTelemetry('open_food_library', { time: time || null });
     if (time) setLibraryTime(time);
     changeTab('library');
   }
 
   function openQuickLog(time: string) {
+    recordTestTelemetry('open_quick_log', { time });
     setQuickLogTime(time);
     setQuickLogVisible(true);
   }
@@ -659,7 +688,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} onUpdateFood={updateFood} onUpdateRecipe={updateRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onExportDiagnostics={exportAiDiagnostics} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onExportDiagnostics={exportAiDiagnostics} testingTelemetryEnabled={testingTelemetryEnabled()} onClearTestTelemetry={clearRemoteTestTelemetry} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>
