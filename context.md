@@ -53,6 +53,12 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Food visuals now use more than 100 native color-emoji choices and a much broader automatic dictionary, including Pakistani/South Asian foods and aliases. Food and recipe editors include a horizontal icon picker plus the existing gallery-photo and custom-emoji options. MacroFactor artwork is proprietary and is not copied.
 - Worker version `5c4f87c4-7a27-4d72-bdf4-15ba5f7a076b` is deployed. A live authenticated no-write smoke test returned executable actions for all three requested items at both explicit groups: `1 cup chai` at 09:00, then `2 plate chicken biryani` and `1.5 cup Coke` at 13:30. Mobile and relay TypeScript pass, all **17/17** mobile tests pass, public Expo config resolves the new native plugin/adaptive icon, and Android/Hermes export succeeds at 899 modules / 2.6 MB.
 
+### v0.2.2 preview artifact
+
+- Issue [#24](https://github.com/A-Weedy-Place/fitness-macro/issues/24), implementation PR [#25](https://github.com/A-Weedy-Place/fitness-macro/pull/25), and generated release PR [#26](https://github.com/A-Weedy-Place/fitness-macro/pull/26) produced release [`v0.2.2`](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.2).
+- GitHub Actions run [`33911759405`](https://github.com/A-Weedy-Place/fitness-macro/actions/runs/33911759405) built EAS job `854874a1-0a50-46a5-9b74-1076d3c2ef4d` from tagged commit `9f575bb` as Android `versionCode` **4** and attached [`Weed-Fitness-v0.2.2-preview.apk`](https://github.com/A-Weedy-Place/fitness-macro/releases/download/v0.2.2/Weed-Fitness-v0.2.2-preview.apk). Size: `114,141,243` bytes. SHA-256: `89d335f1ee61818db767f383260171391dabb11ceeb359b9644f3e31e29570b7`.
+- Install v0.2.2 directly over v0.2.1 so Android preserves the owner’s local diary. Do not uninstall first unless deleting local app data is intentional.
+
 ## Food correctness and editable cookbook stage — 2026-09-01
 
 - A named prepared drink or dish is one diary food, not a set of separate diary rows. The relay now explicitly treats cold milk coffee, milk coffee, iced coffee, lassi, shakes, and comparable composite drinks as `create_recipe_and_log`: individual ingredients are saved inside the recipe only.
