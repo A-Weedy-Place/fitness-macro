@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationBar } from 'expo-navigation-bar';
 import * as Updates from 'expo-updates';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -53,6 +52,7 @@ import { AssistantScreen } from './src/screens/AssistantScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { AccountLockScreen } from './src/screens/AccountLockScreen';
 import { LaunchScreen } from './src/components/LaunchScreen';
+import { AppErrorBoundary } from './src/components/AppErrorBoundary';
 import { activeTheme, AppThemeName, atmosphere, colors, consumeThemeAppearanceReturn, isDarkTheme, saveAppTheme, saveThemeAppearanceReturn } from './src/theme';
 import { withDemoData } from './src/logic/demoData';
 import { createPortableBackup, restorePortableBackup } from './src/logic/backup';
@@ -91,9 +91,14 @@ function testingSnapshot(state: AppState) {
 }
 
 const LOCAL_PIN_KEY = 'fitness-macro-local-pin-v1';
+type GlobalErrorUtils = { getGlobalHandler?: () => ((error: Error, isFatal?: boolean) => void); setGlobalHandler?: (handler: (error: Error, isFatal?: boolean) => void) => void };
 
 export default function App() {
-  return <SafeAreaProvider><NavigationBar hidden={false} style={isDarkTheme ? 'dark' : 'light'} /><FitnessApp /></SafeAreaProvider>;
+  return (
+    <AppErrorBoundary onError={(error, info) => recordTestTelemetry('render_error', { message: error.message, componentStack: info.componentStack?.slice(0, 2_000) })}>
+      <SafeAreaProvider><FitnessApp /></SafeAreaProvider>
+    </AppErrorBoundary>
+  );
 }
 
 function FitnessApp() {
@@ -116,14 +121,37 @@ function FitnessApp() {
   const [lockReady, setLockReady] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [startupError, setStartupError] = useState<Error | null>(null);
+  const wasBackgrounded = useRef(false);
 
   useEffect(() => {
+    const errorUtils = (globalThis as typeof globalThis & { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
+    const previous = errorUtils?.getGlobalHandler?.();
+    if (!errorUtils?.setGlobalHandler || !previous) return;
+    const handler = (error: Error, isFatal?: boolean) => {
+      recordTestTelemetry('global_js_error', { message: error?.message || String(error), isFatal: Boolean(isFatal), stack: error?.stack?.slice(0, 4_000) });
+      previous(error, isFatal);
+    };
+    errorUtils.setGlobalHandler(handler);
+    return () => errorUtils.setGlobalHandler?.(previous);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    recordTestTelemetry('bootstrap_started');
     void loadState().then((loaded) => {
+      if (!mounted) return;
       setState(loaded);
       setDate(today(loaded.profile?.timeZone));
       setHydrated(true);
       recordTestTelemetry('app_loaded', { hasProfile: Boolean(loaded.profile?.onboardingComplete), localSchema: loaded.version });
+    }).catch((error) => {
+      if (!mounted) return;
+      const failure = error instanceof Error ? error : new Error(String(error));
+      recordTestTelemetry('bootstrap_failed', { message: failure.message });
+      setStartupError(failure);
     });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -141,23 +169,31 @@ function FitnessApp() {
   useEffect(() => {
     if (!hydrated) return;
     void saveState(state);
-    recordTestTelemetry('state_snapshot', { snapshot: testingSnapshot(state) });
+    const timer = setTimeout(() => recordTestTelemetry('state_snapshot', { snapshot: testingSnapshot(state) }), 800);
+    return () => clearTimeout(timer);
   }, [state, hydrated]);
 
   useEffect(() => {
-    if (hydrated && activeTab === 'profile') void refreshIntegrationStatus();
+    if (hydrated && activeTab === 'profile') {
+      void refreshIntegrationStatus();
+      void refreshHealthConnect(false);
+    }
   }, [hydrated, activeTab]);
 
   useEffect(() => {
     if (!hydrated) return;
-    void refreshHealthConnect(false);
     const subscription = NativeAppState.addEventListener('change', (next) => {
       if (next === 'active') {
-        recordTestTelemetry('app_foregrounded');
-        void flushTestTelemetry();
-        void refreshHealthConnect(false);
+        if (wasBackgrounded.current) {
+          recordTestTelemetry('app_foregrounded');
+          void flushTestTelemetry();
+          void refreshHealthConnect(false);
+        }
+        wasBackgrounded.current = false;
+      } else {
+        wasBackgrounded.current = true;
+        if (pinEnabled) setUnlocked(false);
       }
-      else if (pinEnabled) setUnlocked(false);
     });
     return () => subscription.remove();
   }, [hydrated, pinEnabled]);
@@ -357,7 +393,9 @@ function FitnessApp() {
   }
 
   async function refreshHealthConnect(requestAccess: boolean) {
+    recordTestTelemetry('health_connect_sync_started', { requestAccess });
     const result = await syncHealthConnect(requestAccess);
+    recordTestTelemetry('health_connect_sync_finished', { available: result.status.available, permissionGranted: result.status.permissionGranted, activityCount: result.activities.length, weightCount: result.weights.length });
     setHealthConnect(result.status);
     if (result.activities.length || result.weights.length || result.replaceLegacyActivities) setState((current) => {
       // v0.3 used one generic row per calorie record. Newer builds import
@@ -678,6 +716,7 @@ function FitnessApp() {
     setQuickLogVisible(true);
   }
 
+  if (startupError) throw startupError;
   if (!hydrated || !lockReady) return <LaunchScreen />;
   if (pinEnabled && !unlocked) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><AccountLockScreen onUnlock={unlockLocalPin} /></SafeAreaView>;
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
