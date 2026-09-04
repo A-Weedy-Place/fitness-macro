@@ -21,8 +21,8 @@ Use this after changing native dependencies, plugins, permissions, native config
 1. Merge normal PRs using Conventional Commit titles.
 2. Release Please maintains a release PR with the next version and changelog.
 3. Merge that release PR. It creates the version tag and GitHub Release.
-4. Open **Actions → Build release APK**, enter the new tag, and run it.
-5. The workflow checks out the exact tag, runs CI, creates a signed production APK with EAS, and attaches it to the GitHub Release.
+4. Open **Actions → Build release APK**, enter the new tag, and choose `preview` for private owner testing or `production` for an eventual public-ready build.
+5. The workflow checks out the exact tag, runs CI, creates a signed APK with the chosen EAS profile, and attaches a profile-labelled file to the GitHub Release. Preview builds include the temporary automatic test telemetry; production builds do not.
 
 The first tracked release is `v0.1.0`. EAS remotely increments Android's internal `versionCode`; the human-facing version remains controlled by the release PR.
 
@@ -32,7 +32,7 @@ Use this sequence for every owner test stage: GitHub issue → `codex/issue-<num
 
 ## Required repository secret
 
-Both delivery workflows require an Expo access token stored as the GitHub Actions secret `EXPO_TOKEN`. Never place it in source code, an issue, a PR, or a workflow file.
+Both delivery workflows require an Expo personal access token stored as the repository GitHub Actions secret `EXPO_TOKEN`. Never place it in source code, an issue, a PR, or a workflow file.
 
 The relay access token remains an EAS environment variable. The `preview` and `production` EAS environments must each contain `EXPO_PUBLIC_RELAY_ACCESS_TOKEN` until the relay is replaced with real account/device authentication.
 
