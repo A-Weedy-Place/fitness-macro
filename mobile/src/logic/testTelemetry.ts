@@ -46,8 +46,15 @@ async function deviceId(): Promise<string> {
 async function readQueue(): Promise<TestTelemetryEvent[]> {
   const stored = await AsyncStorage.getItem(QUEUE_KEY);
   if (!stored) return [];
-  const parsed = JSON.parse(stored);
-  return Array.isArray(parsed) ? parsed as TestTelemetryEvent[] : [];
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed as TestTelemetryEvent[] : [];
+  } catch {
+    // A damaged optional diagnostics queue must never prevent future startup
+    // breadcrumbs or affect the owner's diary.
+    await AsyncStorage.removeItem(QUEUE_KEY);
+    return [];
+  }
 }
 
 /**

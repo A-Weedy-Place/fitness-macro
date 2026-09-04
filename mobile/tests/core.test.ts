@@ -12,7 +12,7 @@ import { mealForTime } from '../src/logic/time';
 import { calculateRecipe } from '../src/logic/recipes';
 import { estimateAdaptiveExpenditure } from '../src/logic/expenditure';
 import { dateFor, startOfWeekMonday } from '../src/utils/dates';
-import { EMPTY_STATE, upsertWeight } from '../src/storage/localDb';
+import { EMPTY_STATE, migrateState, upsertWeight } from '../src/storage/localDb';
 import { BodyMetricLog, FoodEntry, FoodItem, UserProfile } from '../src/types';
 
 const food: FoodItem = {
@@ -125,6 +125,23 @@ test('portable backup migrates to schema 7 without connection data', () => {
   const state = restorePortableBackup(createPortableBackup({ version: 7, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [] }));
   assert.equal(state.version, 7);
   assert.equal(state.entries[0].eatenAt, '13:00');
+});
+
+test('startup migration tolerates partial legacy collections without discarding valid data', () => {
+  const state = migrateState({
+    version: 6,
+    foods: [null, food],
+    entries: [null, { ...entry('legacy_entry', '2026-08-07'), eatenAt: undefined }],
+    weights: [null, { id: 'legacy_weight', date: '2026-08-07', weightKg: '82.5', enteredAt: null }],
+    plans: [{ id: 'partial_plan', name: 'Old plan', items: null, createdAt: null, updatedAt: null }],
+    recipes: [{ id: 'partial_recipe', name: 'Old dish', foodId: food.id, servings: 1, finalWeightGrams: 100, ingredients: null, createdAt: '', updatedAt: '' }]
+  });
+  assert.equal(state.version, 7);
+  assert.ok(state.foods.some((item) => item.id === food.id));
+  assert.equal(state.entries[0].eatenAt, '13:00');
+  assert.equal(state.weights[0].weightKg, 82.5);
+  assert.deepEqual(state.plans[0].items, []);
+  assert.deepEqual(state.recipes[0].ingredients, []);
 });
 
 test('one weigh-in is retained per calendar day, with the latest replacing the first', () => {
