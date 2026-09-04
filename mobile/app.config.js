@@ -8,7 +8,7 @@ export default {
       backgroundColor: '#F7F1E7'
     },
     slug: 'fitness-macro',
-    version: '0.2.0', // x-release-please-version
+    version: '0.2.1', // x-release-please-version
     orientation: 'portrait',
     jsEngine: 'hermes',
     updates: {
