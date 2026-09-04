@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.0...v0.2.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **mobile:** harden startup recovery ([d905d52](https://github.com/A-Weedy-Place/fitness-macro/commit/d905d52215e415f4167caa654b133075ad538c95)), closes [#19](https://github.com/A-Weedy-Place/fitness-macro/issues/19)
+
 ## [0.2.0](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.1.0...v0.2.0) (2026-09-04)
 
 
