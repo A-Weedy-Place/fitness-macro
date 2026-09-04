@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FoodItem, Recipe } from '../types';
 import { foodEmoji } from '../logic/foodVisual';
 import { gramsForQuantity, servingQuantityForDisplay } from '../logic/portions';
 import { PortionEditor } from './PortionEditor';
 import { Button, SectionTitle } from './ui';
 import { colors } from '../theme';
+import { recordTestTelemetry } from '../logic/testTelemetry';
 
 function nutrition(food: FoodItem, grams: number) {
   const scale = grams / 100;
@@ -14,16 +15,18 @@ function nutrition(food: FoodItem, grams: number) {
 }
 
 export function FoodDetailSheet({ food, foods, recipes, onClose, onAdd, onEditFood, onEditRecipe }: { food: FoodItem | null; foods: FoodItem[]; recipes: Recipe[]; onClose: () => void; onAdd?: (food: FoodItem, servingQuantity: number) => void; onEditFood?: (food: FoodItem) => void; onEditRecipe?: (recipe: Recipe) => void }) {
+  const insets = useSafeAreaInsets();
   const [quantity, setQuantity] = useState('1'); const [unit, setUnit] = useState('serving');
-  useEffect(() => { if (!food) return; setQuantity(String(food.serving.amount)); setUnit(food.serving.unit); }, [food?.id]);
+  useEffect(() => { if (!food) return; setQuantity(String(food.serving.amount)); setUnit(food.serving.unit); recordTestTelemetry('food_detail_opened', { foodId: food.id, hasRecipe: recipes.some((recipe) => recipe.foodId === food.id) }); }, [food?.id]);
   const grams = food ? gramsForQuantity(food, Number(quantity) || 0, unit) : 0;
   const total = food ? nutrition(food, grams) : { calories: 0, protein: 0, fat: 0, carbs: 0 };
   const recipe = food ? recipes.find((item) => item.foodId === food.id) : undefined;
   const ingredientRows = useMemo(() => recipe ? recipe.ingredients.map((item) => { const ingredient = foods.find((candidate) => candidate.id === item.foodId); if (!ingredient) return null; const ingredientGrams = gramsForQuantity(ingredient, item.quantity, item.unit); return { item, ingredient, grams: ingredientGrams, macros: nutrition(ingredient, ingredientGrams) }; }).filter(Boolean) as Array<{ item: Recipe['ingredients'][number]; ingredient: FoodItem; grams: number; macros: ReturnType<typeof nutrition> }> : [], [recipe, foods]);
   if (!food) return null;
-  return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={styles.root}>
+  const footerPadding = Math.max(14, insets.bottom + 10);
+  return <Modal visible animationType="slide" navigationBarTranslucent={false} statusBarTranslucent={false} onRequestClose={onClose}><SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
     <View style={styles.top}><Pressable style={styles.close} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.topTitle}>{recipe ? 'Dish details' : 'Food details'}</Text><View style={styles.topSpacer} /></View>
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 126 + footerPadding }]} showsVerticalScrollIndicator={false}>
       {food.imageUri ? <Image source={{ uri: food.imageUri }} style={styles.heroPhoto} /> : <Text style={styles.heroEmoji}>{foodEmoji(food)}</Text>}<Text style={styles.name}>{food.name}</Text>{food.brand ? <Text style={styles.brand}>{food.brand}</Text> : null}
       <View style={styles.macros}><Macro value={total.calories.toFixed(0)} label="Calories" color={colors.pine} large /><Macro value={total.protein.toFixed(1)} label="Protein" color={colors.pine} /><Macro value={total.fat.toFixed(1)} label="Fat" color={colors.pine} /><Macro value={total.carbs.toFixed(1)} label="Carbs" color={colors.pine} /></View>
       <View style={styles.divider} />
@@ -31,7 +34,7 @@ export function FoodDetailSheet({ food, foods, recipes, onClose, onAdd, onEditFo
       {recipe ? <View style={styles.ingredients}><SectionTitle title="Ingredients" detail={`${ingredientRows.length} in full batch`} />{ingredientRows.map(({ item, ingredient, grams: itemGrams, macros }) => <View key={item.foodId} style={styles.ingredient}><Text style={styles.ingredientEmoji}>{foodEmoji(ingredient)}</Text><View style={styles.ingredientCopy}><Text style={styles.ingredientName} numberOfLines={2}>{ingredient.name}</Text><Text style={styles.ingredientAmount}>{item.quantity} {item.unit} · {itemGrams.toFixed(0)} g</Text><Text style={styles.ingredientMacros}>{macros.calories.toFixed(0)} kcal · {macros.protein.toFixed(1)}P · {macros.fat.toFixed(1)}F · {macros.carbs.toFixed(1)}C</Text></View></View>)}</View> : null}
       <Text style={styles.source}>{food.source.source.toUpperCase()} · values normalized per 100 g</Text>
     </ScrollView>
-    {onAdd || (recipe ? onEditRecipe : onEditFood) ? <View style={styles.footer}>{recipe && onEditRecipe ? <Button label="Edit recipe" compact tone="secondary" onPress={() => { onEditRecipe(recipe); onClose(); }} /> : !recipe && onEditFood ? <Button label="Edit food" compact tone="secondary" onPress={() => { onEditFood(food); onClose(); }} /> : null}{onAdd ? <Button label={`Log now · ${total.calories.toFixed(0)} kcal`} onPress={() => { onAdd(food, servingQuantityForDisplay(food, Number(quantity) || 0, unit)); onClose(); }} /> : null}</View> : null}
+    {onAdd || (recipe ? onEditRecipe : onEditFood) ? <View style={[styles.footer, { paddingBottom: footerPadding }]}>{recipe && onEditRecipe ? <Button label="Edit recipe" compact tone="secondary" onPress={() => { onEditRecipe(recipe); onClose(); }} /> : !recipe && onEditFood ? <Button label="Edit food" compact tone="secondary" onPress={() => { onEditFood(food); onClose(); }} /> : null}{onAdd ? <Button label={`Log now · ${total.calories.toFixed(0)} kcal`} onPress={() => { onAdd(food, servingQuantityForDisplay(food, Number(quantity) || 0, unit)); onClose(); }} /> : null}</View> : null}
   </SafeAreaView></Modal>;
 }
 

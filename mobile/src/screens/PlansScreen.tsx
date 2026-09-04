@@ -43,10 +43,11 @@ export function PlansScreen({ state, date, onEditProfile, onCreate, onApply, onD
       <MetricTile value={`${goal ? Math.abs(goal.calories - tdee) : '—'}`} label="adjustment" />
     </View>
 
-    <SectionTitle title="Day templates" detail={`${state.plans.length} saved`} />
+    <SectionTitle title="Repeat a logged day" detail={`${state.plans.length} saved`} />
     <Card>
-      <Field label="Template name" value={name} onChangeText={setName} placeholder="Training day" />
-      <Button label="Save this day" onPress={create} disabled={!dayEntries.length} />
+      <Text style={styles.explainer}>This is a manual shortcut, not AI. Save the foods logged on {date}, then copy them to another selected day later. It never changes your calorie target.</Text>
+      <Field label="Saved day name" value={name} onChangeText={setName} placeholder="Training day" />
+      <Button label="Save foods from this day" onPress={create} disabled={!dayEntries.length} />
     </Card>
     {state.plans.length ? state.plans.map((plan) => {
       const entries = plan.items.map((item) => ({ ...item, id: item.id, date, enteredAt: plan.updatedAt, source: { source: 'manual' as const } }));
@@ -62,6 +63,7 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   planName: { color: colors.ink, fontSize: 17, fontWeight: '900' },
   planMeta: { color: colors.muted, fontSize: 10, marginTop: 4 },
+  explainer: { color: colors.muted, fontSize: 10.5, lineHeight: 16, marginBottom: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 13 },
   apply: { flex: 1 }
 });

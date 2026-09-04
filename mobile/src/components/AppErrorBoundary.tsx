@@ -37,6 +37,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <View style={styles.mark} />
           <Text style={styles.title}>Weed Fitness stayed open</Text>
           <Text style={styles.body}>A screen could not load, but your diary has not been deleted. Take a screenshot of the code below so the test build can be corrected.</Text>
+          <Text style={styles.codeLabel}>WF means Weed Fitness. RENDER means a screen failed to draw.</Text>
           <View style={styles.codeBox}><Text selectable style={styles.code}>WF-RENDER · {detail.slice(0, 500)}</Text></View>
           <Pressable style={styles.button} onPress={() => this.setState({ error: null })}><Text style={styles.buttonText}>Try opening again</Text></Pressable>
         </ScrollView>
@@ -51,6 +52,7 @@ const styles = StyleSheet.create({
   mark: { width: 34, height: 6, borderRadius: 3, backgroundColor: '#E66B50', marginBottom: 18 },
   title: { color: '#1D2C25', fontSize: 25, lineHeight: 31, fontWeight: '900', marginBottom: 10 },
   body: { color: '#6F746A', fontSize: 14, lineHeight: 21, marginBottom: 18 },
+  codeLabel: { color: '#6F746A', fontSize: 10, lineHeight: 15, marginBottom: 7 },
   codeBox: { borderWidth: 1, borderColor: '#DED3C2', backgroundColor: '#FFFDF8', borderRadius: 14, padding: 13, marginBottom: 18 },
   code: { color: '#1D2C25', fontSize: 11, lineHeight: 17 },
   button: { minHeight: 46, borderRadius: 14, backgroundColor: '#173F2D', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },

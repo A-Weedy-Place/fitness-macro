@@ -2,11 +2,6 @@ export default {
   expo: {
     name: 'Weed Fitness',
     icon: './assets/weed-fitness-icon.png',
-    splash: {
-      image: './assets/weed-fitness-icon.png',
-      resizeMode: 'contain',
-      backgroundColor: '#F7F1E7'
-    },
     slug: 'fitness-macro',
     version: '0.2.1', // x-release-please-version
     orientation: 'portrait',
@@ -28,6 +23,19 @@ export default {
     plugins: [
       'expo-font',
       'expo-asset',
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/weed-fitness-icon.png',
+          imageWidth: 190,
+          resizeMode: 'contain',
+          backgroundColor: '#F7F1E7',
+          dark: {
+            image: './assets/weed-fitness-icon.png',
+            backgroundColor: '#F7F1E7'
+          }
+        }
+      ],
       'react-native-health-connect',
       [
         'expo-navigation-bar',
@@ -75,6 +83,10 @@ export default {
     },
     android: {
       package: 'com.ashar.fitnessmacro',
+      adaptiveIcon: {
+        foregroundImage: './assets/weed-fitness-icon.png',
+        backgroundColor: '#0B3D2E'
+      },
       softwareKeyboardLayoutMode: 'resize',
       // These are declared in the Android manifest so the Health Connect
       // permission screen can appear in a standalone APK. The app requests

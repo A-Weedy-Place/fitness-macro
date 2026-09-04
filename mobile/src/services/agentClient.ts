@@ -7,16 +7,40 @@ import type { TestTelemetryEvent } from '../logic/testTelemetry';
 const RELAY_BASE_URL = 'https://fitness-macro-relay.fitness-macro-relay.workers.dev';
 const BUILD_ACCESS_TOKEN = process.env.EXPO_PUBLIC_RELAY_ACCESS_TOKEN?.trim() || '';
 
+class RelayError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'RelayError';
+    this.code = code;
+  }
+}
+
+function responseCode(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown };
+    return typeof parsed.error === 'string' ? parsed.error : 'unknown_relay_error';
+  } catch {
+    return 'invalid_relay_error';
+  }
+}
+
 function missingBuildToken(): Error {
-  return new Error('This APK does not include the AI service. Install the latest private test build.');
+  return new RelayError('unauthorized_app', 'This APK does not include the AI service. Install the latest private test build.');
 }
 
 function friendlyError(status: number, body: string): Error {
+  const code = responseCode(body);
   if (status === 401) return missingBuildToken();
-  if (status === 429) return new Error('The free AI service is temporarily at its limit. Please try again later.');
-  if (status === 504) return new Error('The AI service took too long. Please try again.');
-  if (body.includes('food_not_found')) return new Error('No nutrition data was found for that barcode.');
-  return new Error('The AI service is temporarily unavailable. Please try again.');
+  if (status === 429) return new RelayError(code, 'The free AI service is temporarily at its limit. Please try again later.');
+  if (status === 504) return new RelayError(code, 'The AI service took too long. Please try again.');
+  if (code === 'food_not_found') return new RelayError(code, 'No nutrition data was found for that barcode.');
+  if (['groq_empty_response', 'groq_invalid_response', 'groq_invalid_plan', 'groq_incomplete_plan'].includes(code)) {
+    return new RelayError(code, 'The AI returned an incomplete action plan, so nothing was changed. Please try again.');
+  }
+  if (code.startsWith('groq_request_failed_')) return new RelayError(code, 'The AI provider could not complete that request. Nothing was changed; please try again shortly.');
+  return new RelayError(code, 'The AI service is temporarily unavailable. Please try again.');
 }
 
 function headers(contentType = 'application/json'): Record<string, string> {

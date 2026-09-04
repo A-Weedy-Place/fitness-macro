@@ -13,6 +13,7 @@ import { HealthConnectStatus } from '../services/healthConnect';
 import { deviceTimeZone, isSupportedTimeZone } from '../utils/dates';
 import { recommendDailyGoal } from '../logic/tdee';
 import { AppUpdatePanel } from '../components/AppUpdatePanel';
+import { recordTestTelemetry } from '../logic/testTelemetry';
 
 type Panel = 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'updates' | 'data' | 'security' | null;
 
@@ -58,6 +59,10 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
   useEffect(() => {
     if (initialPanel) setPanel(initialPanel);
   }, [initialPanel]);
+
+  useEffect(() => {
+    recordTestTelemetry('profile_panel_viewed', { panel: panel || 'account_home' });
+  }, [panel]);
 
   const year = useMemo(() => {
     const series = buildDailySeries({ endDate: date, days: 365, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
@@ -152,15 +157,14 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
     {panel ? <Pressable style={styles.back} onPress={() => setPanel(null)}><Ionicons name="chevron-back" size={18} color={colors.pine} /><Text style={styles.backText}>Account</Text></Pressable> : null}
 
     {panel === null ? <>
-      <Card dark><View style={styles.identity}><View style={styles.identityCopy}><Text style={styles.identityName}>{profile?.displayName || 'Local profile'}</Text><Text style={styles.identityMeta}>{goalLabel} · {displayWeight(year.currentWeight)}</Text><Text style={styles.identitySub}>{profile?.targetWeightKg ? `Target ${displayWeight(profile.targetWeightKg)}` : 'Set a target in Profile & measurements'}</Text></View><Ionicons name="person-circle-outline" size={28} color={colors.pine} /></View></Card>
       <SectionTitle title="At a glance" detail="your recorded progress" />
       <View style={styles.metricGrid}><Metric icon="calendar-outline" label="Logged days" value={String(year.loggedDays)} /><Metric icon="scale-outline" label="Weight change" value={year.weightChange == null ? '—' : `${year.weightChange > 0 ? '+' : ''}${profile?.preferredWeightUnit === 'lb' ? kgToLb(year.weightChange).toFixed(1) : year.weightChange.toFixed(1)} ${profile?.preferredWeightUnit === 'lb' ? 'lb' : 'kg'}`} /><Metric icon="flag-outline" label="Goal progress" value={year.goalProgress == null ? 'Steady' : `${year.goalProgress.toFixed(0)}%`} /></View>
       <SettingsGroup title="Account"><SettingsRow icon="person-outline" title="Profile & measurements" detail="Name, body details, units, and goal pace" onPress={() => setPanel('profile')} /><SettingsRow icon="flag-outline" title="Goals & daily plan" detail="Your target, adaptive check-ins, and how it works" onPress={() => setPanel('goals')} /><SettingsRow icon="stats-chart-outline" title="Progress & statistics" detail="A compact account summary of your own data" onPress={() => setPanel('statistics')} last /></SettingsGroup>
       <SettingsGroup title="Preferences"><SettingsRow icon="time-outline" title="Date & time" detail={timeZone === 'device' ? `Device time · ${deviceTimeZone()}` : timeZone} onPress={() => setPanel('time')} /><SettingsRow icon="color-palette-outline" title="Appearance & display" detail={themeOptions.find((item) => item.key === activeTheme)?.label || 'Theme'} onPress={() => setPanel('appearance')} /><SettingsRow icon="shield-checkmark-outline" title="Local app lock" detail={pinEnabled ? 'PIN enabled' : 'No PIN set'} onPress={() => setPanel('security')} last /></SettingsGroup>
       <SettingsGroup title="Services"><SettingsRow icon="link-outline" title="Connections" detail={`Voice: ${voiceLabel} · Health: ${healthLabel}`} onPress={() => setPanel('connections')} last /></SettingsGroup>
-      <SettingsGroup title="App"><SettingsRow icon="cloud-download-outline" title="Updates" detail="Version, channel, and update status" onPress={() => setPanel('updates')} last /></SettingsGroup>
-      <SettingsGroup title="Your data"><SettingsRow icon="cloud-download-outline" title="Backup & restore" detail="Your diary stays on this device" onPress={() => setPanel('data')} last /></SettingsGroup>
-      <Text style={styles.footer}>LOCAL-FIRST · SCHEMA 7</Text>
+      <SettingsGroup title="App"><SettingsRow icon="download-outline" title="Updates" detail="Version, channel, and update status" onPress={() => setPanel('updates')} last /></SettingsGroup>
+      <SettingsGroup title="Your data"><SettingsRow icon="archive-outline" title="Backup & restore" detail="Your diary stays on this device" onPress={() => setPanel('data')} last /></SettingsGroup>
+      <Text style={styles.footer}>PRIVATE PREVIEW · DATA SAVED LOCALLY FIRST</Text>
     </> : null}
 
     {panel === 'profile' ? <>

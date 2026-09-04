@@ -13,7 +13,9 @@ import { calculateRecipe } from '../src/logic/recipes';
 import { estimateAdaptiveExpenditure } from '../src/logic/expenditure';
 import { dateFor, startOfWeekMonday } from '../src/utils/dates';
 import { EMPTY_STATE, migrateState, upsertWeight } from '../src/storage/localDb';
-import { BodyMetricLog, FoodEntry, FoodItem, UserProfile } from '../src/types';
+import { BodyMetricLog, FoodEntry, FoodItem, UserProfile, AssistantAction } from '../src/types';
+import { foodEmoji, FOOD_EMOJI_CHOICES } from '../src/logic/foodVisual';
+import { assistantActionIssue } from '../src/logic/assistantActions';
 
 const food: FoodItem = {
   id: 'food_1',
@@ -183,4 +185,25 @@ test('adaptive expenditure combines logged intake with weight direction', () => 
   const result = estimateAdaptiveExpenditure(series, weights, 2500);
   assert.equal(result.status, 'updating');
   assert.ok(result.estimate >= 2450 && result.estimate <= 2550);
+});
+
+test('food visuals cover regional dishes and expose a broad owner picker', () => {
+  const visual = (name: string) => foodEmoji({ name, tags: [] });
+  assert.equal(visual('Chicken biryani'), '🍛');
+  assert.equal(visual('Mash ki dal'), '🥣');
+  assert.equal(visual('Shami kebab'), '🍢');
+  assert.equal(visual('Cold milk coffee'), '🧋');
+  assert.equal(visual('Coke Zero'), '🥤');
+  assert.ok(FOOD_EMOJI_CHOICES.length >= 100);
+});
+
+test('incomplete assistant food actions are blocked before Apply', () => {
+  const base: AssistantAction = {
+    type: 'log_foods', summary: 'Log biryani', confidence: 0.9, targetId: null, date: '2026-09-04', time: '13:30', name: null,
+    value: null, quantity: null, servings: null, durationMinutes: null, calories: null, protein: null, carbs: null, fat: null,
+    displayName: null, targetWeightKg: null, activityFactor: null, goalMode: null, goalIntensity: null, targetDate: null, destination: null, ingredients: []
+  };
+  assert.match(assistantActionIssue(base, EMPTY_STATE, '2026-09-04') || '', /missing its amount|nutrition/);
+  const valid = { ...base, ingredients: [{ name: 'Chicken biryani', brand: null, quantity: 2, unit: 'plate', gramsPerUnit: 350, caloriesPer100g: 190, proteinPer100g: 9, carbsPer100g: 24, fatPer100g: 6, confidence: 0.7 }] };
+  assert.equal(assistantActionIssue(valid, EMPTY_STATE, '2026-09-04'), null);
 });
