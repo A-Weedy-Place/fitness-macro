@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.1...v0.2.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* **mobile:** harden phone test experience ([025baed](https://github.com/A-Weedy-Place/fitness-macro/commit/025baedf0628f0c63f2a7b20e4fbbd218c451a27)), closes [#24](https://github.com/A-Weedy-Place/fitness-macro/issues/24)
+
 ## [0.2.1](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.0...v0.2.1) (2026-09-04)
 
 
