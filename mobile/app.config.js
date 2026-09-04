@@ -3,7 +3,7 @@ export default {
     name: 'Weed Fitness',
     icon: './assets/weed-fitness-icon.png',
     slug: 'fitness-macro',
-    version: '0.2.1', // x-release-please-version
+    version: '0.2.2', // x-release-please-version
     orientation: 'portrait',
     jsEngine: 'hermes',
     updates: {
