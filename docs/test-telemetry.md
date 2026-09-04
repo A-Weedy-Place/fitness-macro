@@ -4,11 +4,12 @@ This is a temporary, owner-authorised **preview-build** facility for finding rea
 
 ## What the preview build sends automatically
 
-- App navigation and important local state commits.
+- App navigation, profile panel views, food searches/results, food/detail editor opens, and important local state commits.
+- Structured before/after deltas for foods, diary entries, weights, activities, saved days, recipes, profile, and goals, so a log/edit/delete can be distinguished without guessing from a generic success message.
 - The complete test diary snapshot needed to reproduce a state: profile measurements, foods, recipes, diary entries, weight, activities, goals, plans, and nutrition program. Device-only image paths are excluded.
-- Typed AI commands, speech transcripts, assistant replies, proposed actions, confirmation/apply outcomes, and errors.
+- Typed AI commands, speech transcripts, assistant replies, proposed action ingredients/amounts, confirmation/apply outcomes, and safe relay error codes.
 
-It never sends the Groq key, relay access token, local PIN, raw voice audio, or device photo files. Telemetry is queued locally while offline and retried later; it must never block a food log, edit, or any other normal action.
+It never sends the Groq key, relay access token, local PIN, raw voice audio, device photo files, or indiscriminate screen/touch recordings. “Everything” in private testing means every meaningful product action and resulting state. Telemetry is queued locally while offline, uploaded in batches of up to ten, and retried later; it must never block a food log, edit, or any other normal action.
 
 ## Storage and removal
 

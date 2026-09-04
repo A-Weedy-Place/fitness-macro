@@ -1,7 +1,7 @@
 ---
 tags: [fitness-app, macronutrients, local-first, roadmap]
 project: fitness-macro
-updated: 2026-09-04
+updated: 2026-09-05
 ---
 
 ## Source of truth: standalone mobile product architecture - 2026-09-01
@@ -24,8 +24,9 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 - No PC hop, LAN pairing, desktop process, PC IP, Codex CLI, or desktop dependency in the target product.
 - Never embed, obfuscate, or hash a usable Groq key into the APK. A hash cannot call Groq; a bundled secret can be extracted. The private relay keeps the key server-side, as normal consumer apps do.
-- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. The Worker relays only required AI requests and Open Food Facts lookups, and stores no diary, profile, recipe, or raw-audio data.
+- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. Normal AI routes retain no diary, profile, recipe, or raw-audio data. Owner-authorized preview builds separately send sanitized test evidence to private D1; that test-only path must be removed before public release.
 - Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists GPT-OSS 120B at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
+- The Worker accepts at most 60 app requests/hour per warm isolate and compacts local context to 6,000 characters. Single-purpose GPT-OSS calls remain capped at 1,000 completion tokens; the strict multi-action planner may use 1,800 because its repeated schema fields otherwise caused omitted items. Rapid bursts can still reach Groq's 8K TPM free limit.
 - The preview APK has a separate rotatable relay access token. It is not the Groq key, but it is extractable from an APK and is only an owner-test safeguard. Proper account/device authentication and durable global rate limits are required before public distribution.
 
 ### Required delivery rhythm
@@ -41,6 +42,20 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archive and is not used at runtime.
 - `mobile/src/services/agentClient.ts` now calls the Worker directly. Mobile state is schema **7** with no remote sync queue.
 - `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
+
+## Physical-phone AI and launch repair stage — 2026-09-05
+
+- The owner confirmed v0.2.1 now opens on the same phone. Its startup-crash hardening is therefore verified; the next problem is a brief Android native starting-window flash before the branded React loader.
+- Issue #24 owns this isolated repair stage. Android startup now uses the supported `expo-splash-screen` config plugin and an adaptive Weed Fitness icon. The native surface is held until the first React frame, then fades into the existing in-app loader. Android always creates a native starting window; the fix replaces the generic gray/white default with Weed Fitness branding rather than pretending that OS phase can be removed.
+- Private D1 evidence captured the failed session. Chai and Coke were saved; biryani was omitted from a multi-time command. A later biryani plan exposed Apply repeatedly but contained no executable mutation, followed by a generic upstream failure. The final failure was **not** the explicit Groq free-limit response.
+- Multi-food planning now requires every explicit time group, validates every action on the Worker and again on-device, and rejects an incomplete plan before showing Apply. A structurally rejected plan receives one corrective model retry; normal valid requests still make one model call. Applying is atomic; invalid recipe weights no longer allow partial results. User-facing applied counts ignore hidden food-catalogue creation, so two logged diary rows report two.
+- Safe relay error codes distinguish Groq free limits, timeout, upstream HTTP failure, empty response, invalid JSON, invalid plan, and incomplete multi-time plan. Preview telemetry records those codes plus ingredient names/amounts, while still excluding credentials and raw audio.
+- Preview telemetry now batches up to ten queued events per request, records structured before/after collection deltas for every state commit, food searches/results, profile panel views, and food/diary editor opens. Navigation, AI, health, lifecycle, errors, and complete sanitized state snapshots remain covered. “Everything” means meaningful product actions and resulting state—not secret/PIN values, raw audio, photos, or indiscriminate touch coordinates.
+- Full-screen food and diary sheets explicitly reserve the Android navigation-bar inset and make their footer/content padding dynamic, so Save/Delete/Log controls remain above Back/Home/Recents.
+- Goals calls the former “Day templates” **Repeat a logged day** and explains that it is a manual copy shortcut, not AI: it saves one day’s logged foods and later copies them to the selected date without changing targets.
+- The duplicate identity card on You is removed; the header avatar/name is the single identity presentation. Updates uses a download icon, Backup & restore uses an archive icon, and the preview footer no longer exposes an internal schema label. The fallback screen explains that `WF-RENDER` means a Weed Fitness screen failed to render.
+- Food visuals now use more than 100 native color-emoji choices and a much broader automatic dictionary, including Pakistani/South Asian foods and aliases. Food and recipe editors include a horizontal icon picker plus the existing gallery-photo and custom-emoji options. MacroFactor artwork is proprietary and is not copied.
+- Worker version `5c4f87c4-7a27-4d72-bdf4-15ba5f7a076b` is deployed. A live authenticated no-write smoke test returned executable actions for all three requested items at both explicit groups: `1 cup chai` at 09:00, then `2 plate chicken biryani` and `1.5 cup Coke` at 13:30. Mobile and relay TypeScript pass, all **17/17** mobile tests pass, public Expo config resolves the new native plugin/adaptive icon, and Android/Hermes export succeeds at 899 modules / 2.6 MB.
 
 ## Food correctness and editable cookbook stage — 2026-09-01
 

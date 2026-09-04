@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FoodItem, Recipe, RecipeIngredient, RecipeInput } from '../types';
 import { calculateRecipe } from '../logic/recipes';
-import { foodEmoji } from '../logic/foodVisual';
+import { foodEmoji, FOOD_EMOJI_CHOICES } from '../logic/foodVisual';
 import { Button, Card, Field, SectionTitle } from './ui';
 import { PortionEditor } from './PortionEditor';
 import { colors } from '../theme';
@@ -33,7 +33,8 @@ export function RecipeBuilder({ foods, recipe, recipeFood, onSearch, onResolve, 
     <SectionTitle title={recipe ? 'Edit recipe' : 'Build a dish'} detail="ingredient-backed nutrition" />
     <View style={styles.visual}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.photo} /> : <Text style={styles.visualEmoji}>{emoji || foodEmoji(recipeFood || { name, source: { source: 'manual' } } as FoodItem)}</Text>}<View style={styles.visualActions}><Button label="Choose photo" compact tone="secondary" onPress={() => void pickImage()} />{imageUri ? <Button label="Remove photo" compact tone="ghost" onPress={() => setImageUri(undefined)} /> : null}</View></View>
     <Field label="Dish name" value={name} onChangeText={setName} placeholder="Home chicken korma" />
-    <Field label="Emoji (optional)" value={emoji} onChangeText={setEmoji} placeholder="🍛" maxLength={8} />
+    <Text style={styles.iconLabel}>CHOOSE A DISH ICON</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRail}>{FOOD_EMOJI_CHOICES.map((choice) => <Pressable key={choice} onPress={() => setEmoji(choice)} style={[styles.iconChoice, emoji === choice && styles.iconChoiceSelected]}><Text style={styles.iconText}>{choice}</Text></Pressable>)}</ScrollView>
+    <Field label="Or enter an emoji" value={emoji} onChangeText={setEmoji} placeholder="🍛" maxLength={8} />
     <Field label="Describe dish for AI ingredient draft" value={description} onChangeText={setDescription} multiline placeholder="Chicken korma for four people, normal home recipe" />
     <Button label={busy ? 'Working...' : 'Draft separate ingredients with AI'} disabled={busy} tone="secondary" onPress={() => void aiDraft()} />
     <Text style={styles.or}>OR SEARCH THE FOOD INGREDIENT CATALOGUE</Text>
@@ -50,6 +51,7 @@ export function RecipeBuilder({ foods, recipe, recipeFood, onSearch, onResolve, 
 
 const styles = StyleSheet.create({
   or: { color: colors.faint, fontSize: 8, fontWeight: '900', letterSpacing: 1, textAlign: 'center', marginVertical: 13 }, suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9, marginBottom: 12 }, suggestion: { width: '48.5%', minHeight: 48, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.pineSoft, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 13 }, suggestionEmoji: { fontSize: 17, marginRight: 6 }, suggestionText: { color: colors.pine, fontSize: 9, lineHeight: 12, fontWeight: '800', flex: 1, flexShrink: 1 },
+  iconLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 7 }, iconRail: { gap: 7, paddingBottom: 12 }, iconChoice: { width: 43, height: 43, borderRadius: 13, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }, iconChoiceSelected: { borderColor: colors.pine, borderWidth: 2, backgroundColor: colors.pineSoft }, iconText: { fontSize: 24 },
   visual: { alignItems: 'center', marginBottom: 7 }, photo: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.paperDeep }, visualEmoji: { fontSize: 48, height: 61 }, visualActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 5 }, row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 8 }, ingredientTitle: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 5 }, emoji: { fontSize: 20 }, name: { color: colors.ink, fontWeight: '800', fontSize: 11, flex: 1, flexShrink: 1 }, remove: { backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 }, removeText: { color: colors.danger, fontSize: 8, fontWeight: '900' },
   columns: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, half: { width: '48.5%' }, summary: { backgroundColor: colors.paper, borderRadius: 13, padding: 10, marginBottom: 9 }, summaryValue: { color: colors.pine, fontSize: 16, fontWeight: '900' }, summaryText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 3 }, gap: { height: 6 }
 });

@@ -41,6 +41,9 @@ const assistantSystem = [
   'For a one-off modifier such as extra oil, log the base dish and modifier separately; do not alter the saved base recipe.',
   'Only create a recipe when no suitable saved dish exists. A created dish must list practical ingredients separately.',
   'For diary edits and deletes, match the food name the person says to entries[].foodName and return that entry\'s exact entries[].id. Treat harmless word-order or punctuation changes as a match (for example, "black coffee" and "coffee, black"). Ask for clarification only if two real entries are equally plausible.',
+  'For a command containing several foods, drinks, dates, or times, cover every distinct requested item. Before returning JSON, silently make a checklist from the command and verify that each item, quantity, and explicit time appears in an action. Never return only the first or easiest part of a multi-food command.',
+  'If separate foods were eaten at different explicit times, use separate log_foods actions for those time groups. Never merge a later food into an earlier time or omit a time group.',
+  'In nutrition context, speech recognition may turn "log/logged" into "lock/locked". Interpret phrases such as "you locked chai" as referring to logging, not security.',
   'When the command clearly asks to log, create, change, delete, save, or update something and includes enough detail, you must return the corresponding mutation action. Do not answer conversationally with an empty action list; the app needs a visible confirmation plan to perform the requested change.',
   'Nutrition estimates must be conservative, normalized per 100 grams, and marked with lower confidence when uncertain. Never describe an uncited estimate as approved or verified.',
   'Use stable IDs from context for edits and deletes. Never invent a target ID.',
@@ -180,10 +183,11 @@ function relayError(error: unknown): Response {
   if (message === 'request_too_large' || message === 'invalid_json' || message === 'invalid_request') return reject(400, message);
   if (message === 'groq_free_limit_reached') return reject(429, message);
   if (message === 'groq_timeout') return reject(504, message);
+  if (['groq_empty_response', 'groq_invalid_response', 'groq_invalid_plan', 'groq_incomplete_plan'].includes(message) || /^groq_request_failed_\d{3}$/.test(message)) return reject(502, message);
   return reject(502, 'ai_service_unavailable');
 }
 
-async function requestGroqJson<T>(env: Env, input: { system: string; user: string; schemaName: string; schema: JsonRecord }): Promise<T> {
+async function requestGroqJson<T>(env: Env, input: { system: string; user: string; schemaName: string; schema: JsonRecord; maxCompletionTokens?: number }): Promise<T> {
   const apiKey = env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new Error('groq_not_configured');
   const controller = new AbortController();
@@ -198,20 +202,25 @@ async function requestGroqJson<T>(env: Env, input: { system: string; user: strin
         messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.user }],
         reasoning_effort: 'low',
         temperature: 0.1,
-        // The free GPT-OSS tier has an 8K token-per-minute ceiling. Fitness actions
-        // are intentionally narrow, so a 1K cap keeps normal voice logs responsive.
-        max_completion_tokens: 1_000,
+        // Single-purpose requests stay at 1K. The typed app planner may use up
+        // to 1.8K because its strict schema repeats nullable fields per action;
+        // a lower cap caused valid multi-time commands to omit ingredients.
+        max_completion_tokens: input.maxCompletionTokens || 1_000,
         response_format: { type: 'json_schema', json_schema: { name: input.schemaName, strict: true, schema: input.schema } }
       })
     });
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string | null } }>; error?: { code?: string; message?: string } };
     if (!response.ok) {
       if (response.status === 429) throw new Error('groq_free_limit_reached');
-      throw new Error('groq_request_failed');
+      throw new Error(`groq_request_failed_${response.status}`);
     }
     const content = payload.choices?.[0]?.message?.content?.trim();
     if (!content) throw new Error('groq_empty_response');
-    return JSON.parse(content) as T;
+    try {
+      return JSON.parse(content) as T;
+    } catch {
+      throw new Error('groq_invalid_response');
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw new Error('groq_timeout');
     throw error;
@@ -253,6 +262,54 @@ function resolveEntryId(action: JsonRecord, compact: JsonRecord, command: string
   return null;
 }
 
+function positive(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function nonNegative(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function validIngredients(action: JsonRecord): boolean {
+  const ingredients = Array.isArray(action.ingredients) ? action.ingredients.map(asRecord).filter((item): item is JsonRecord => Boolean(item)) : [];
+  return ingredients.length > 0 && ingredients.every((ingredient) => (
+    Boolean(boundedString(ingredient.name, 160))
+    && Boolean(boundedString(ingredient.unit, 40))
+    && positive(ingredient.quantity)
+    && positive(ingredient.gramsPerUnit)
+    && [ingredient.caloriesPer100g, ingredient.proteinPer100g, ingredient.carbsPer100g, ingredient.fatPer100g].every(nonNegative)
+  ));
+}
+
+function validAssistantAction(action: JsonRecord, compact: JsonRecord): boolean {
+  const type = String(action.type || '');
+  if (type === 'log_foods' || type === 'save_food') return validIngredients(action);
+  if (type === 'create_recipe' || type === 'create_recipe_and_log') return Boolean(boundedString(action.name, 160)) && validIngredients(action);
+  if (type === 'log_weight') return positive(action.value);
+  if (type === 'log_activity') return Boolean(boundedString(action.name, 160)) && positive(action.durationMinutes);
+  if (type === 'change_entry_time' || type === 'delete_entry' || type === 'delete_weight' || type === 'delete_activity' || type === 'apply_plan' || type === 'delete_plan') return Boolean(boundedString(action.targetId, 160));
+  if (type === 'set_goal') return positive(action.calories) && positive(action.protein) && nonNegative(action.carbs) && nonNegative(action.fat);
+  if (type === 'update_profile') return [action.displayName, action.value, action.targetWeightKg, action.activityFactor, action.goalMode, action.goalIntensity, action.targetDate].some((value) => value != null);
+  if (type === 'create_plan_from_day') return Boolean(boundedString(action.name, 160)) && Array.isArray(compact.entries) && compact.entries.length > 0;
+  if (type === 'navigate') return Boolean(boundedString(action.destination, 40));
+  return false;
+}
+
+function requestedTimes(command: string): string[] {
+  const values = new Set<string>();
+  for (const match of command.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b/gi)) {
+    let hour = Number(match[1]);
+    const minute = Number(match[2] || '0');
+    if (hour < 1 || hour > 12 || minute > 59) continue;
+    const suffix = match[3].toLowerCase().replace(/[^apm]/g, '');
+    if (suffix.startsWith('p') && hour < 12) hour += 12;
+    if (suffix.startsWith('a') && hour === 12) hour = 0;
+    values.add(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`);
+  }
+  for (const match of command.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)) values.add(`${String(Number(match[1])).padStart(2, '0')}:${match[2]}`);
+  return [...values];
+}
+
 function enforceAssistantPlan(value: unknown, compact: JsonRecord, command: string): JsonRecord {
   const plan = asRecord(value);
   if (!plan || !Array.isArray(plan.actions)) throw new Error('invalid_request');
@@ -275,8 +332,13 @@ function enforceAssistantPlan(value: unknown, compact: JsonRecord, command: stri
     }) : [];
     const type = String(action.type || '');
     const targetId = type === 'change_entry_time' || type === 'delete_entry' ? resolveEntryId(action, compact, command) : action.targetId;
-    return { ...action, targetId, ingredients };
+    return { ...action, targetId, ingredients } as JsonRecord;
   });
+  if (actions.some((action) => !validAssistantAction(action, compact))) throw new Error('groq_invalid_plan');
+  const isNewLog = /\b(log|logged|lock|locked|add|record|ate|had|drank)\b/i.test(command) && !/\b(change|move|edit|delete|remove)\b/i.test(command);
+  const explicitTimes = isNewLog ? requestedTimes(command) : [];
+  const plannedTimes = new Set(actions.filter((action) => action.type === 'log_foods' || action.type === 'create_recipe_and_log').map((action) => action.time).filter((time): time is string => typeof time === 'string'));
+  if (explicitTimes.length > 1 && explicitTimes.some((time) => !plannedTimes.has(time))) throw new Error('groq_incomplete_plan');
   const mutationReply = /\b(logged|created|deleted|updated|changed|saved|applied)\b/i.test(String(plan.reply || ''));
   return {
     ...plan,
@@ -284,6 +346,32 @@ function enforceAssistantPlan(value: unknown, compact: JsonRecord, command: stri
     requiresConfirmation: actions.length > 0,
     reply: actions.length > 0 && mutationReply ? `Ready to apply: ${actions.map((action) => String((action as JsonRecord).summary || 'proposed change')).join('; ')}. Confirm to save these changes.` : plan.reply
   };
+}
+
+async function createAssistantPlan(command: string, compact: JsonRecord, env: Env): Promise<JsonRecord> {
+  const request = (user: string) => requestGroqJson<JsonRecord>(env, {
+    system: assistantSystem,
+    user,
+    schemaName: 'fitness_app_action_plan',
+    schema: assistantPlanSchema,
+    maxCompletionTokens: 1_800
+  });
+  const first = await request(`Command JSON: ${JSON.stringify(command)}\nRelevant app context JSON: ${JSON.stringify(compact)}`);
+  try {
+    return enforceAssistantPlan(first, compact, command);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code !== 'groq_invalid_plan' && code !== 'groq_incomplete_plan') throw error;
+    // Retry only a structurally rejected response. Ordinary successful calls
+    // remain one model request, protecting the free allowance.
+    const corrected = await request([
+      `Command JSON: ${JSON.stringify(command)}`,
+      `Relevant app context JSON: ${JSON.stringify(compact)}`,
+      `Rejected plan JSON: ${JSON.stringify(first)}`,
+      `Correction required: ${code}. Return a complete executable plan covering every requested item, quantity, and explicit time.`
+    ].join('\n'));
+    return enforceAssistantPlan(corrected, compact, command);
+  }
 }
 
 async function stableFoodId(seed: string): Promise<string> {
@@ -466,12 +554,12 @@ export default {
     if (authorizationError) return authorizationError;
     try {
       if (request.method === 'GET' && path === '/v1/audio/status') return respond(200, { configured: Boolean(env.GROQ_API_KEY?.trim()), retention: 'none', provider: 'groq', mode: 'hosted_relay', model: 'whisper-large-v3-turbo' });
-      if (request.method === 'GET' && path === '/v1/agent/status') return respond(200, { appAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', busy: false, timeoutSeconds: 45 }, foodAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', liveSearch: false, busy: false, timeoutSeconds: 45 } });
+      if (request.method === 'GET' && path === '/v1/agent/status') return respond(200, { revision: 'issue-24-2026-09-05', appAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', busy: false, timeoutSeconds: 45 }, foodAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', liveSearch: false, busy: false, timeoutSeconds: 45 } });
       if (request.method === 'POST' && path === '/v1/audio/transcribe') return respond(200, await transcribe(request, env));
       if (request.method === 'POST' && path === '/v1/assistant/plan') {
         const input = await readJson(request); const command = boundedString(input.command); if (!command) throw new Error('invalid_request');
-        const compact = compactAppContext(command, input.context); const plan = await requestGroqJson<JsonRecord>(env, { system: assistantSystem, user: `Command JSON: ${JSON.stringify(command)}\nRelevant app context JSON: ${JSON.stringify(compact)}`, schemaName: 'fitness_app_action_plan', schema: assistantPlanSchema });
-        return respond(200, enforceAssistantPlan(plan, compact, command));
+        const compact = compactAppContext(command, input.context);
+        return respond(200, await createAssistantPlan(command, compact, env));
       }
       if (request.method === 'POST' && path === '/v1/agent/command') return respond(200, await resolveFood(await readJson(request), env));
       if (request.method === 'POST' && path === '/v1/goals/recommendation') return respond(200, await nutritionProgram(await readJson(request), env));

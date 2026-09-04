@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
+import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
 import {
   ActivityEntry,
@@ -65,6 +66,7 @@ import { buildDailySeries } from './src/logic/analytics';
 import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
 import { diagnosticActions, exportAiDiagnostics, recordAiDiagnostic } from './src/logic/diagnostics';
 import { clearRemoteTestTelemetry, flushTestTelemetry, recordTestTelemetry, testingTelemetryEnabled } from './src/logic/testTelemetry';
+import { assistantPlanIssue } from './src/logic/assistantActions';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -90,10 +92,46 @@ function testingSnapshot(state: AppState) {
   };
 }
 
+function collectionDelta(before: Array<{ id: string }>, after: Array<{ id: string }>) {
+  const previous = new Map(before.map((item) => [item.id, JSON.stringify(item)]));
+  const next = new Map(after.map((item) => [item.id, JSON.stringify(item)]));
+  return {
+    before: before.length,
+    after: after.length,
+    added: [...next.keys()].filter((id) => !previous.has(id)),
+    removed: [...previous.keys()].filter((id) => !next.has(id)),
+    updated: [...next.keys()].filter((id) => previous.has(id) && previous.get(id) !== next.get(id))
+  };
+}
+
+function testingStateDelta(before: AppState, after: AppState) {
+  return {
+    foods: collectionDelta(before.foods, after.foods),
+    entries: collectionDelta(before.entries, after.entries),
+    weights: collectionDelta(before.weights, after.weights),
+    activities: collectionDelta(before.activities, after.activities),
+    plans: collectionDelta(before.plans, after.plans),
+    recipes: collectionDelta(before.recipes, after.recipes),
+    profileChanged: JSON.stringify(before.profile) !== JSON.stringify(after.profile),
+    goalsChanged: JSON.stringify(before.goals) !== JSON.stringify(after.goals)
+  };
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 const LOCAL_PIN_KEY = 'fitness-macro-local-pin-v1';
 type GlobalErrorUtils = { getGlobalHandler?: () => ((error: Error, isFatal?: boolean) => void); setGlobalHandler?: (handler: (error: Error, isFatal?: boolean) => void) => void };
 
 export default function App() {
+  useEffect(() => {
+    // The first React frame is LaunchScreen, so it is safe to fade the native
+    // splash now without exposing an unpainted white window.
+    void SplashScreen.hideAsync();
+  }, []);
   return (
     <AppErrorBoundary onError={(error, info) => recordTestTelemetry('render_error', { message: error.message, componentStack: info.componentStack?.slice(0, 2_000) })}>
       <SafeAreaProvider><FitnessApp /></SafeAreaProvider>
@@ -225,7 +263,7 @@ function FitnessApp() {
   async function commit(nextState: AppState, success: string) {
     setState(nextState);
     setStatus(success);
-    recordTestTelemetry('state_committed', { message: success });
+    recordTestTelemetry('state_committed', { message: success, changes: testingStateDelta(state, nextState) });
   }
 
   async function addPlate(items: PlateItem[], eatenAt: string, logDate = date) {
@@ -271,6 +309,7 @@ function FitnessApp() {
   }
 
   async function searchFoods(query: string) {
+    recordTestTelemetry('food_search_requested', { query: query.slice(0, 120) });
     const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const aliases: Record<string, string[]> = { dal: ['daal', 'dhal', 'lentil'], daal: ['dal', 'dhal', 'lentil'], dhal: ['dal', 'daal', 'lentil'], mash: ['urad'], urad: ['mash'], roti: ['chapati'], chapati: ['roti'], aloo: ['potato'], keema: ['mince', 'minced'] };
     const ignored = new Set(['a', 'an', 'and', 'the', 'with', 'of', 'ki', 'ka', 'ke', 'kiya', 'plate', 'dish', 'cooked']);
@@ -293,10 +332,13 @@ function FitnessApp() {
       setState((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
       const combined = [...local, ...result.items];
       const unique = combined.filter((food, index) => combined.findIndex((candidate) => candidate.id === food.id) === index);
-      return unique.sort((a, b) => score(b) - score(a));
+      const sorted = unique.sort((a, b) => score(b) - score(a));
+      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: result.items.length, resultCount: sorted.length });
+      return sorted;
     } catch {
       // Manual local search stays available even when the optional catalogue
       // lookup is offline, rate-limited, or returns no compatible result.
+      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: 0, resultCount: local.length, hostedUnavailable: true });
       return local;
     }
   }
@@ -316,7 +358,7 @@ function FitnessApp() {
       recordAiDiagnostic({ area: 'quick_log', outcome: response.plan?.intent === 'clarify' ? 'no_action' : 'plan_ready', command: phrase, reply: response.plan?.summary || response.notes.join(' '), actions: response.plan ? [{ type: response.plan.intent, name: response.plan.dish?.name || response.plan.title, date: response.plan.log.date, time: response.plan.log.eatenAt }] : [] });
       return resolution;
     } catch (error) {
-      recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: phrase, error: error instanceof Error ? error.message : 'Food AI request failed.' });
+      recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: phrase, error: error instanceof Error ? error.message : 'Food AI request failed.', errorCode: errorCode(error) });
       throw error;
     }
   }
@@ -387,7 +429,7 @@ function FitnessApp() {
       recordAiDiagnostic({ area: 'voice', outcome: 'plan_ready', command: result.text, reply: `Transcribed with ${result.engine}.` });
       return result.text;
     } catch (error) {
-      recordAiDiagnostic({ area: 'voice', outcome: 'failed', error: error instanceof Error ? error.message : 'Voice transcription failed.' });
+      recordAiDiagnostic({ area: 'voice', outcome: 'failed', error: error instanceof Error ? error.message : 'Voice transcription failed.', errorCode: errorCode(error) });
       throw error;
     }
   }
@@ -440,16 +482,17 @@ function FitnessApp() {
     recordAiDiagnostic({ area: 'assistant', outcome: 'requested', command });
     try {
       const plan = await planAssistantCommand(command, assistantContext());
-      const askedForChange = /\b(log|add|record|delete|remove|change|move|update|edit|save|create|set|weigh|weight)\b/i.test(command);
-      const noAction = askedForChange && !plan.actions.length;
-      const reply = noAction ? `${plan.reply}\n\nNo change is ready to apply yet. Please resend this with the food, amount, and time so I can prepare a visible plan.` : plan.reply;
+      const askedForChange = /\b(log|logged|lock|locked|add|record|delete|remove|change|move|update|edit|save|create|set|weigh|weight|ate|had|drank)\b/i.test(command);
+      const issue = plan.actions.length ? assistantPlanIssue(plan, state, date) : null;
+      const noAction = askedForChange && (!plan.actions.length || Boolean(issue));
+      const reply = noAction ? `${plan.reply}\n\n${issue ? 'That plan was incomplete, so I did not enable Apply and nothing changed.' : 'No change is ready to apply yet.'} Please try again with the food, amount, and time.` : plan.reply;
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: reply, createdAt: now() }]);
-      setAssistantPlan(plan.actions.length ? plan : null);
-      recordAiDiagnostic({ area: 'assistant', outcome: noAction ? 'no_action' : 'plan_ready', command, reply: plan.reply, actions: diagnosticActions(plan) });
+      setAssistantPlan(!noAction && plan.actions.length ? plan : null);
+      recordAiDiagnostic({ area: 'assistant', outcome: noAction ? 'no_action' : 'plan_ready', command, reply: plan.reply, error: issue || undefined, actions: diagnosticActions(plan) });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The assistant could not prepare a plan.';
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: message, createdAt: now() }]);
-      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', command, error: message });
+      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', command, error: message, errorCode: errorCode(error) });
     } finally {
       setAssistantBusy(false);
     }
@@ -460,6 +503,8 @@ function FitnessApp() {
     setAssistantBusy(true);
     recordAiDiagnostic({ area: 'assistant', outcome: 'apply_requested', actions: diagnosticActions(assistantPlan) });
     try {
+      const planIssue = assistantPlanIssue(assistantPlan, state, date);
+      if (planIssue) throw new Error(`This plan is incomplete (${planIssue}). Nothing was changed. Please ask me to prepare it again.`);
       let next = state;
       let appliedChanges = 0;
       let destination: TabKey | null = null;
@@ -470,7 +515,6 @@ function FitnessApp() {
         if (existing) return existing;
         const food: FoodItem = { id: makeId('ai_food'), name: ingredient.name, brand: ingredient.brand || undefined, serving: { unit: ingredient.unit, amount: 1, gramsPerUnit: ingredient.gramsPerUnit }, nutrition: { calories: ingredient.caloriesPer100g, protein: ingredient.proteinPer100g, carbs: ingredient.carbsPer100g, fat: ingredient.fatPer100g }, tags: ['ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: ingredient.confidence } };
         next = upsertFood(next, food);
-        appliedChanges += 1;
         return food;
       };
       const addEntry = (food: FoodItem, quantity: number, entryDate: string, eatenAt: string, note: string) => {
@@ -482,12 +526,12 @@ function FitnessApp() {
       };
       for (const action of assistantPlan.actions) {
         const actionDate = action.date || date; const actionTime = action.time || currentTime(next.profile?.timeZone);
-        if (action.type === 'save_food') action.ingredients.forEach(foodFor);
+        if (action.type === 'save_food') { action.ingredients.forEach(foodFor); appliedChanges += action.ingredients.length; }
         else if (action.type === 'log_foods') action.ingredients.forEach((ingredient) => { const food = foodFor(ingredient); addEntry(food, ingredient.quantity, actionDate, actionTime, 'Logged by the AI assistant.'); });
         else if (action.type === 'create_recipe' || action.type === 'create_recipe_and_log') {
           const recipeIngredients = action.ingredients.map((ingredient) => { const food = foodFor(ingredient); return { foodId: food.id, quantity: ingredient.quantity, unit: ingredient.unit }; });
           const calculation = calculateRecipe(recipeIngredients, next.foods);
-          if (!calculation.finalGrams) continue;
+          if (!calculation.finalGrams) throw new Error('This recipe plan has no usable ingredient weight. Nothing was changed.');
           const foodId = makeId('recipe_food'); const recipeId = makeId('recipe'); const servings = Math.max(action.servings || 1, 1);
           const dish: FoodItem = { id: foodId, name: action.name || 'AI dish', serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / servings }, nutrition: calculation.per100g, tags: ['recipe', 'custom-dish', 'ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: action.confidence } };
           const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, reviewStatus: 'ai_estimated', sourceName: 'Groq ingredient estimate', createdAt: timestamp, updatedAt: timestamp };
@@ -534,7 +578,7 @@ function FitnessApp() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'I could not apply that plan.';
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: message, createdAt: now() }]);
-      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', actions: diagnosticActions(assistantPlan), error: message });
+      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', actions: diagnosticActions(assistantPlan), error: message, errorCode: errorCode(error) });
     } finally { setAssistantBusy(false); }
   }
 

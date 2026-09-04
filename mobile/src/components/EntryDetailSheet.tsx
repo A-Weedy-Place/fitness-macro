@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FoodEntry, FoodItem } from '../types';
 import { nutritionForEntry } from '../logic/nutrition';
 import { mealForTime } from '../logic/time';
@@ -8,6 +8,7 @@ import { PortionEditor } from './PortionEditor';
 import { CalendarPicker } from './CalendarPicker';
 import { Button, Field } from './ui';
 import { colors } from '../theme';
+import { recordTestTelemetry } from '../logic/testTelemetry';
 
 function validTime(value: string): string | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -32,10 +33,12 @@ export function EntryDetailSheet({ entry, food, onClose, onSave, onDelete }: {
   onSave: (entry: FoodEntry) => void;
   onDelete: (id: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [date, setDate] = useState(''); const [time, setTime] = useState(''); const [quantity, setQuantity] = useState(''); const [unit, setUnit] = useState('serving'); const [note, setNote] = useState('');
   useEffect(() => {
     if (!entry) return;
     setDate(entry.date); setTime(entry.eatenAt || '12:00'); setQuantity(String(entry.portion.quantity)); setUnit(entry.portion.unit); setNote(entry.note || '');
+    recordTestTelemetry('diary_item_editor_opened', { entryId: entry.id, foodId: entry.foodId, date: entry.date, time: entry.eatenAt || null });
   }, [entry?.id]);
   const preview = useMemo(() => entry && food ? nutritionForEntry({ ...entry, portion: { ...entry.portion, quantity: Number(quantity) || 0, unit } }, food) : null, [entry, food, quantity, unit]);
   if (!entry || !food) return null;
@@ -52,9 +55,10 @@ export function EntryDetailSheet({ entry, food, onClose, onSave, onDelete }: {
     onClose();
   }
 
-  return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={styles.root}>
+  const footerPadding = Math.max(14, insets.bottom + 10);
+  return <Modal visible animationType="slide" navigationBarTranslucent={false} statusBarTranslucent={false} onRequestClose={onClose}><SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
     <View style={styles.top}><Pressable style={styles.close} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.topTitle}>Edit diary item</Text><View style={styles.topSpacer} /></View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 136 + footerPadding }]} keyboardShouldPersistTaps="handled">
       <Text style={styles.name}>{food.name}</Text><Text style={styles.subhead}>This changes only this logged item, not your saved food or recipe.</Text>
       {preview ? <View style={styles.macros}><Text style={styles.macro}>{preview.calories.toFixed(0)} kcal</Text><Text style={styles.macroDetail}>{preview.protein.toFixed(1)}P · {preview.fat.toFixed(1)}F · {preview.carbs.toFixed(1)}C</Text></View> : null}
       <View style={styles.divider} />
@@ -65,7 +69,7 @@ export function EntryDetailSheet({ entry, food, onClose, onSave, onDelete }: {
       <Field label="Note (optional)" value={note} onChangeText={setNote} multiline placeholder="Extra oil, restaurant portion, etc." />
       <Text style={styles.helper}>Tap Save to move this item to another day or time. Food and recipe values stay reusable and unchanged.</Text>
     </ScrollView>
-    <View style={styles.footer}><Button label="Save changes" onPress={save} /><View style={styles.gap} /><Button label="Delete this item" tone="danger" onPress={() => Alert.alert('Delete diary item?', `Remove ${food.name} from ${entry.date}?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { onDelete(entry.id); onClose(); } }])} /></View>
+    <View style={[styles.footer, { paddingBottom: footerPadding }]}><Button label="Save changes" onPress={save} /><View style={styles.gap} /><Button label="Delete this item" tone="danger" onPress={() => Alert.alert('Delete diary item?', `Remove ${food.name} from ${entry.date}?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { onDelete(entry.id); onClose(); } }])} /></View>
   </SafeAreaView></Modal>;
 }
 

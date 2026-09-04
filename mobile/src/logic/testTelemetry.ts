@@ -3,9 +3,11 @@ import { postTestTelemetry, resetTestTelemetry } from '../services/agentClient';
 
 const DEVICE_KEY = 'weed-fitness-test-device-v1';
 const QUEUE_KEY = 'weed-fitness-test-telemetry-queue-v1';
-const MAX_QUEUED_EVENTS = 80;
+const MAX_QUEUED_EVENTS = 160;
 const MAX_EVENT_BYTES = 250_000;
-const BATCH_SIZE = 1;
+// The Worker accepts up to 12 events. Batching keeps detailed preview logging
+// from consuming the separate telemetry request allowance one tap at a time.
+const BATCH_SIZE = 10;
 const TEST_TELEMETRY_ENABLED = process.env.EXPO_PUBLIC_TEST_TELEMETRY === 'enabled';
 
 export interface TestTelemetryEvent {

@@ -17,7 +17,8 @@ export interface AiDiagnosticEvent {
   command?: string;
   reply?: string;
   error?: string;
-  actions?: Array<{ type: string; name?: string | null; date?: string | null; time?: string | null; targetId?: string | null }>;
+  errorCode?: string;
+  actions?: Array<{ type: string; name?: string | null; date?: string | null; time?: string | null; targetId?: string | null; ingredientCount?: number; ingredients?: Array<{ name: string; quantity: number; unit: string }> }>;
   appliedChanges?: number;
 }
 
@@ -27,7 +28,15 @@ function clip(value: string | undefined, limit = 900): string | undefined {
 }
 
 export function diagnosticActions(plan: AssistantPlan | undefined): AiDiagnosticEvent['actions'] {
-  return plan?.actions.map((action) => ({ type: action.type, name: action.name, date: action.date, time: action.time, targetId: action.targetId })) || [];
+  return plan?.actions.map((action) => ({
+    type: action.type,
+    name: action.name,
+    date: action.date,
+    time: action.time,
+    targetId: action.targetId,
+    ingredientCount: action.ingredients.length,
+    ingredients: action.ingredients.slice(0, 20).map((ingredient) => ({ name: ingredient.name, quantity: ingredient.quantity, unit: ingredient.unit }))
+  })) || [];
 }
 
 export function recordAiDiagnostic(input: Omit<AiDiagnosticEvent, 'id' | 'at' | 'command' | 'reply' | 'error'> & Pick<AiDiagnosticEvent, 'command' | 'reply' | 'error'>): void {

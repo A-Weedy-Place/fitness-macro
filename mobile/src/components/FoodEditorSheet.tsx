@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FoodItem } from '../types';
 import { Button, Field } from './ui';
 import { colors } from '../theme';
-import { foodEmoji } from '../logic/foodVisual';
+import { foodEmoji, FOOD_EMOJI_CHOICES } from '../logic/foodVisual';
 
 /** Edits an owner-created food without altering its diary history or source. */
 export function FoodEditorSheet({ food, onClose, onSave }: { food: FoodItem | null; onClose: () => void; onSave: (food: FoodItem) => Promise<void> | void }) {
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState(''); const [brand, setBrand] = useState(''); const [emoji, setEmoji] = useState(''); const [imageUri, setImageUri] = useState<string | undefined>();
   const [grams, setGrams] = useState(''); const [calories, setCalories] = useState(''); const [protein, setProtein] = useState(''); const [carbs, setCarbs] = useState(''); const [fat, setFat] = useState('');
   useEffect(() => {
@@ -32,11 +33,13 @@ export function FoodEditorSheet({ food, onClose, onSave }: { food: FoodItem | nu
     onClose();
   }
 
-  return <Modal visible animationType="slide" onRequestClose={onClose}><SafeAreaView style={styles.root}>
+  return <Modal visible animationType="slide" navigationBarTranslucent={false} statusBarTranslucent={false} onRequestClose={onClose}><SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
     <View style={styles.top}><Pressable style={styles.close} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.title}>Edit food</Text><View style={styles.spacer} /></View>
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(42, insets.bottom + 24) }]} showsVerticalScrollIndicator={false}>
       <View style={styles.visual}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.photo} /> : <Text style={styles.emoji}>{foodEmoji({ ...food, emoji })}</Text>}<View style={styles.visualActions}><Button label="Choose photo" compact tone="secondary" onPress={() => void pickImage()} />{imageUri ? <Button label="Remove photo" compact tone="ghost" onPress={() => setImageUri(undefined)} /> : null}</View></View>
-      <Field label="Food name" value={name} onChangeText={setName} /><Field label="Brand (optional)" value={brand} onChangeText={setBrand} /><Field label="Emoji (optional)" value={emoji} onChangeText={setEmoji} placeholder="🥛" maxLength={8} />
+      <Field label="Food name" value={name} onChangeText={setName} /><Field label="Brand (optional)" value={brand} onChangeText={setBrand} />
+      <Text style={styles.iconLabel}>CHOOSE A FOOD ICON</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRail}>{FOOD_EMOJI_CHOICES.map((choice) => <Pressable key={choice} onPress={() => setEmoji(choice)} style={[styles.iconChoice, emoji === choice && styles.iconChoiceSelected]}><Text style={styles.iconText}>{choice}</Text></Pressable>)}</ScrollView>
+      <Field label="Or enter an emoji" value={emoji} onChangeText={setEmoji} placeholder="🥛" maxLength={8} />
       <Text style={styles.helper}>Nutrition is stored per 100 g. Logged dates and amounts stay unchanged; their totals use the corrected reusable food.</Text>
       <Field label={`One ${food.serving.unit} weighs (g)`} value={grams} onChangeText={setGrams} keyboardType="decimal-pad" />
       <View style={styles.grid}><Field label="Calories / 100 g" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" style={styles.half} /><Field label="Protein / 100 g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" style={styles.half} /><Field label="Fat / 100 g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" style={styles.half} /><Field label="Carbs / 100 g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" style={styles.half} /></View>
@@ -46,5 +49,5 @@ export function FoodEditorSheet({ food, onClose, onSave }: { food: FoodItem | nu
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.card }, top: { height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.line }, close: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center' }, closeText: { color: colors.ink, fontSize: 25, lineHeight: 27 }, title: { color: colors.ink, fontSize: 15, fontWeight: '900' }, spacer: { width: 38 }, content: { padding: 20, paddingBottom: 42 }, visual: { alignItems: 'center', marginBottom: 14 }, photo: { width: 86, height: 86, borderRadius: 24, backgroundColor: colors.paperDeep }, emoji: { fontSize: 58, height: 78 }, visualActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 }, helper: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 2, marginBottom: 11 }, grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }
+  root: { flex: 1, backgroundColor: colors.card }, top: { height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.line }, close: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center' }, closeText: { color: colors.ink, fontSize: 25, lineHeight: 27 }, title: { color: colors.ink, fontSize: 15, fontWeight: '900' }, spacer: { width: 38 }, content: { padding: 20, paddingBottom: 42 }, visual: { alignItems: 'center', marginBottom: 14 }, photo: { width: 86, height: 86, borderRadius: 24, backgroundColor: colors.paperDeep }, emoji: { fontSize: 58, height: 78 }, visualActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 }, iconLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 7 }, iconRail: { gap: 7, paddingBottom: 12 }, iconChoice: { width: 43, height: 43, borderRadius: 13, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }, iconChoiceSelected: { borderColor: colors.pine, borderWidth: 2, backgroundColor: colors.pineSoft }, iconText: { fontSize: 24 }, helper: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 2, marginBottom: 11 }, grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }
 });
