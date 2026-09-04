@@ -1,7 +1,7 @@
 ---
 tags: [fitness-app, macronutrients, local-first, roadmap]
 project: fitness-macro
-updated: 2026-08-31
+updated: 2026-09-04
 ---
 
 ## Source of truth: standalone mobile product architecture - 2026-09-01
@@ -71,9 +71,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Health Connect is no longer initialized in the critical first-launch effect. It remains automatic when the app returns from background and refreshes when the owner opens **You**, but it cannot block initial diary rendering. The runtime navigation-bar component and native-driver launch animation were also removed from the bootstrap path; Android navigation-bar visibility remains enforced by native Expo configuration.
 - Expo SDK dependencies are aligned to Doctor's required SDK 57 patches and all 21 Expo Doctor checks pass. Preview builds now auto-increment Android `versionCode`, ensuring a replacement APK is actually installed over older test builds. Mobile TypeScript, the production Hermes export, relay TypeScript, and 15/15 core tests pass; the new test covers partial legacy collections.
 
+### v0.2.1 recovery artifact
+
+- Issue [#19](https://github.com/A-Weedy-Place/fitness-macro/issues/19) and PR [#20](https://github.com/A-Weedy-Place/fitness-macro/pull/20) produced release [`v0.2.1`](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.1). GitHub Actions run [`33863227996`](https://github.com/A-Weedy-Place/fitness-macro/actions/runs/33863227996) passed every gate and attached [`Weed-Fitness-v0.2.1-preview.apk`](https://github.com/A-Weedy-Place/fitness-macro/releases/download/v0.2.1/Weed-Fitness-v0.2.1-preview.apk), size `112,294,352` bytes, SHA-256 `23be5a2922d0340710a393d16082ecf7dacdd4a630f1eaa56c1a3e2a6c7d99b7`.
+- EAS build `31b3936d-1b06-43ec-bbde-8ff3e2faddaf` compiled tagged commit `2e95373` as Android `versionCode` **3**. Install it over v0.2.0 without uninstalling so Android preserves the existing local database.
+- v0.2.0 is a known crashing phone build and is superseded. The exact original native cause remains unproven without Android logs; v0.2.1 remains a recovery candidate until the owner confirms that the same phone reaches **Today**. A `WF-RENDER` code or the last visible launch screen must be captured if it still fails, after which the new early telemetry breadcrumbs can be inspected.
+
 ## Startup and private AI diagnostics stage — 2026-09-04
 
-- Native startup now shows the Weed Fitness logo. Once JavaScript loads, a warm launch screen replaces the temporary empty root with a subtle rotating leaf and local-data message; it does not contact a server.
+- Native startup shows the Weed Fitness logo. Once JavaScript loads, a warm launch screen replaces the temporary empty root with a local-data message; it does not contact a server. The original native-driver rotating leaf was removed from v0.2.1's critical startup path while the phone crash is investigated.
 - The device keeps the last 120 assistant, quick-log, and voice diagnostic events locally: commands/transcripts where available, assistant replies, proposed actions, actual apply counts, and errors. It excludes API keys, raw audio, and the complete app snapshot.
 - **You → Backup & restore → Share AI diagnostics** opens an explicit JSON share sheet. The owner can share it with screenshots for evidence-based debugging; nothing is automatically uploaded and Codex cannot see phone data without that deliberate share.
 - An approved assistant plan that makes no real mutation/no navigation now says that nothing changed instead of falsely reporting success. A detailed mutation request that receives an empty plan gets an explicit no-action result. Relay instructions also require a confirmation plan for sufficiently detailed mutations.
