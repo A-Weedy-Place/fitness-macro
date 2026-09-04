@@ -59,7 +59,7 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - **You → Backup & restore → Share AI diagnostics** opens an explicit JSON share sheet. The owner can share it with screenshots for evidence-based debugging; nothing is automatically uploaded and Codex cannot see phone data without that deliberate share.
 - An approved assistant plan that makes no real mutation/no navigation now says that nothing changed instead of falsely reporting success. A detailed mutation request that receives an empty plan gets an explicit no-action result. Relay instructions also require a confirmation plan for sufficiently detailed mutations.
 - Google/email login stays out of this stage. It needs a deliberately designed authentication, recovery, cloud-sync, consent, and privacy system, rather than being added solely to access diagnostics.
-- Validation: mobile TypeScript and 14 core tests pass; relay TypeScript passes. Native splash changes require a replacement APK.
+- Validation: mobile TypeScript and 14 core tests pass; relay TypeScript passes. Preview APK build `b4dd56e2-3855-4b3f-83cd-36a1532e8a0b` completed on 2026-09-04 from commit `1034328` (version 0.1.0, Android build 2); its direct install link was shared with the owner.
 
 ### Standalone relay validation — 2026-08-31
 
