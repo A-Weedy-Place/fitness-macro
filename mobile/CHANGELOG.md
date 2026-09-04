@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.1.0...v0.2.0) (2026-09-04)
+
+
+### Features
+
+* **testing:** add private telemetry pipeline ([03120b6](https://github.com/A-Weedy-Place/fitness-macro/commit/03120b6b23b8860468e97ca9fee5e8bcf8b36a02)), closes [#12](https://github.com/A-Weedy-Place/fitness-macro/issues/12)
+
 ## 0.1.0 (2026-09-03)
 
 
