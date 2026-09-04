@@ -52,6 +52,7 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AssistantScreen } from './src/screens/AssistantScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { AccountLockScreen } from './src/screens/AccountLockScreen';
+import { LaunchScreen } from './src/components/LaunchScreen';
 import { activeTheme, AppThemeName, atmosphere, colors, consumeThemeAppearanceReturn, isDarkTheme, saveAppTheme, saveThemeAppearanceReturn } from './src/theme';
 import { withDemoData } from './src/logic/demoData';
 import { createPortableBackup, restorePortableBackup } from './src/logic/backup';
@@ -62,6 +63,7 @@ import { estimateActivityCalories } from './src/logic/activityEnergy';
 import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect } from './src/services/healthConnect';
 import { buildDailySeries } from './src/logic/analytics';
 import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
+import { diagnosticActions, exportAiDiagnostics, recordAiDiagnostic } from './src/logic/diagnostics';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -244,33 +246,46 @@ function FitnessApp() {
   }
 
   async function resolveFoods(phrase: string, defaultTime = currentTime(state.profile?.timeZone)): Promise<AgentResolution> {
-    const response = await resolveTranscript(phrase, date, defaultTime, assistantContext());
-    setState((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
-    return {
-      foods: response.candidates,
-      transcript: response.transcript,
-      quantities: Object.fromEntries((response.suggestions || []).map((suggestion) => [suggestion.foodId, suggestion.quantity])),
-      notes: response.notes,
-      plan: response.plan
-    };
+    recordAiDiagnostic({ area: 'quick_log', outcome: 'requested', command: phrase });
+    try {
+      const response = await resolveTranscript(phrase, date, defaultTime, assistantContext());
+      const resolution: AgentResolution = { foods: response.candidates, transcript: response.transcript, quantities: Object.fromEntries((response.suggestions || []).map((suggestion) => [suggestion.foodId, suggestion.quantity])), notes: response.notes, plan: response.plan };
+      setState((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
+      recordAiDiagnostic({ area: 'quick_log', outcome: response.plan?.intent === 'clarify' ? 'no_action' : 'plan_ready', command: phrase, reply: response.plan?.summary || response.notes.join(' '), actions: response.plan ? [{ type: response.plan.intent, name: response.plan.dish?.name || response.plan.title, date: response.plan.log.date, time: response.plan.log.eatenAt }] : [] });
+      return resolution;
+    } catch (error) {
+      recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: phrase, error: error instanceof Error ? error.message : 'Food AI request failed.' });
+      throw error;
+    }
   }
 
   async function executeAgentResolution(resolution: AgentResolution, fallbackTime: string) {
     const plan = resolution.plan;
-    if (!plan || plan.intent === 'clarify') throw new Error(plan?.clarification || 'The assistant needs more detail.');
+    if (!plan || plan.intent === 'clarify') {
+      recordAiDiagnostic({ area: 'quick_log', outcome: 'no_action', command: resolution.transcript, reply: plan?.clarification || 'The assistant needs more detail.' });
+      throw new Error(plan?.clarification || 'The assistant needs more detail.');
+    }
+    recordAiDiagnostic({ area: 'quick_log', outcome: 'apply_requested', command: resolution.transcript, actions: [{ type: plan.intent, name: plan.dish?.name || plan.title, date: plan.log.date, time: plan.log.eatenAt }] });
     const resolvedById = new Map([...state.foods, ...resolution.foods].map((food) => [food.id, food]));
     if (plan.intent === 'log_foods') {
       const items = plan.items.map((item) => resolvedById.get(item.foodId)).filter((food): food is FoodItem => Boolean(food)).map((food) => ({ food, quantity: plan.items.find((item) => item.foodId === food.id)?.quantity || food.serving.amount, note: `AI resolved from: ${resolution.transcript}` }));
-      if (!items.length) throw new Error('The assistant could not match a reliable food.');
+      if (!items.length) {
+        recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: resolution.transcript, error: 'No reliable foods were matched for the proposed log.' });
+        throw new Error('The assistant could not match a reliable food.');
+      }
       const logDate = plan.log.date || date;
       await addPlate(items, plan.log.eatenAt || fallbackTime, logDate);
       setDate(logDate);
+      recordAiDiagnostic({ area: 'quick_log', outcome: 'applied', command: resolution.transcript, actions: [{ type: plan.intent, name: plan.title, date: logDate, time: plan.log.eatenAt }], appliedChanges: items.length });
       return;
     }
     const ingredients = plan.items.filter((item) => resolvedById.has(item.foodId)).map((item) => ({ foodId: item.foodId, quantity: item.quantity, unit: item.unit }));
     const availableFoods = [...resolvedById.values()];
     const calculation = calculateRecipe(ingredients, availableFoods, plan.dish?.finalWeightGrams);
-    if (!ingredients.length || !calculation.finalGrams) throw new Error('The assistant could not build this dish from reliable ingredients.');
+    if (!ingredients.length || !calculation.finalGrams) {
+      recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: resolution.transcript, error: 'The proposed dish did not contain valid ingredients.' });
+      throw new Error('The assistant could not build this dish from reliable ingredients.');
+    }
     const timestamp = now();
     const foodId = makeId('recipe_food');
     const recipeId = makeId('recipe');
@@ -289,6 +304,7 @@ function FitnessApp() {
     next = upsertEntry(upsertRecipe(upsertFood(next, food), recipe), entry);
     await commit(next, `${food.name} created, saved, and logged`);
     setDate(logDate);
+    recordAiDiagnostic({ area: 'quick_log', outcome: 'applied', command: resolution.transcript, actions: [{ type: plan.intent, name: food.name, date: logDate, time: eatenAt }], appliedChanges: 2 });
   }
 
   function changeTheme(theme: AppThemeName) {
@@ -303,9 +319,15 @@ function FitnessApp() {
   }
 
   async function transcribeFood(uri: string) {
-    const result = await transcribeRecording(uri);
-    setStatus(`Audio transcribed by ${result.engine}; raw audio was not retained.`);
-    return result.text;
+    try {
+      const result = await transcribeRecording(uri);
+      setStatus(`Audio transcribed by ${result.engine}; raw audio was not retained.`);
+      recordAiDiagnostic({ area: 'voice', outcome: 'plan_ready', command: result.text, reply: `Transcribed with ${result.engine}.` });
+      return result.text;
+    } catch (error) {
+      recordAiDiagnostic({ area: 'voice', outcome: 'failed', error: error instanceof Error ? error.message : 'Voice transcription failed.' });
+      throw error;
+    }
   }
 
   async function refreshHealthConnect(requestAccess: boolean) {
@@ -351,12 +373,19 @@ function FitnessApp() {
     setAssistantMessages((current) => [...current, userMessage]);
     setAssistantPlan(null);
     setAssistantBusy(true);
+    recordAiDiagnostic({ area: 'assistant', outcome: 'requested', command });
     try {
       const plan = await planAssistantCommand(command, assistantContext());
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: plan.reply, createdAt: now() }]);
+      const askedForChange = /\b(log|add|record|delete|remove|change|move|update|edit|save|create|set|weigh|weight)\b/i.test(command);
+      const noAction = askedForChange && !plan.actions.length;
+      const reply = noAction ? `${plan.reply}\n\nNo change is ready to apply yet. Please resend this with the food, amount, and time so I can prepare a visible plan.` : plan.reply;
+      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: reply, createdAt: now() }]);
       setAssistantPlan(plan.actions.length ? plan : null);
+      recordAiDiagnostic({ area: 'assistant', outcome: noAction ? 'no_action' : 'plan_ready', command, reply: plan.reply, actions: diagnosticActions(plan) });
     } catch (error) {
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: error instanceof Error ? error.message : 'The assistant could not prepare a plan.', createdAt: now() }]);
+      const message = error instanceof Error ? error.message : 'The assistant could not prepare a plan.';
+      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: message, createdAt: now() }]);
+      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', command, error: message });
     } finally {
       setAssistantBusy(false);
     }
@@ -365,6 +394,7 @@ function FitnessApp() {
   async function executeAssistantPlan() {
     if (!assistantPlan?.actions.length) return;
     setAssistantBusy(true);
+    recordAiDiagnostic({ area: 'assistant', outcome: 'apply_requested', actions: diagnosticActions(assistantPlan) });
     try {
       let next = state;
       let appliedChanges = 0;
@@ -429,13 +459,18 @@ function FitnessApp() {
         } else if (action.type === 'delete_plan' && action.targetId) { next = removePlan(next, action.targetId); appliedChanges += 1; }
         else if (action.type === 'navigate' && action.destination) destination = action.destination;
       }
+      if (!appliedChanges && !destination) throw new Error('Nothing was applied. Your diary has not changed; please resend the command so the assistant can prepare a valid action.');
       if (appliedChanges) await commit(next, `Assistant applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'}`);
       if (diaryDate) { setDate(diaryDate); changeTab('today'); }
       else if (destination) changeTab(destination);
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: `Applied ${assistantPlan.actions.length} approved action${assistantPlan.actions.length === 1 ? '' : 's'}.`, createdAt: now() }]);
+      const resultMessage = appliedChanges ? `Applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'} successfully.` : 'Opened the requested screen.';
+      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: resultMessage, createdAt: now() }]);
+      recordAiDiagnostic({ area: 'assistant', outcome: 'applied', actions: diagnosticActions(assistantPlan), appliedChanges });
       setAssistantPlan(null);
     } catch (error) {
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: error instanceof Error ? error.message : 'I could not apply that plan.', createdAt: now() }]);
+      const message = error instanceof Error ? error.message : 'I could not apply that plan.';
+      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: message, createdAt: now() }]);
+      recordAiDiagnostic({ area: 'assistant', outcome: 'failed', actions: diagnosticActions(assistantPlan), error: message });
     } finally { setAssistantBusy(false); }
   }
 
@@ -614,7 +649,7 @@ function FitnessApp() {
     setQuickLogVisible(true);
   }
 
-  if (!hydrated || !lockReady) return <SafeAreaView style={styles.root} />;
+  if (!hydrated || !lockReady) return <LaunchScreen />;
   if (pinEnabled && !unlocked) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><AccountLockScreen onUnlock={unlockLocalPin} /></SafeAreaView>;
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
 
@@ -624,7 +659,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} onUpdateFood={updateFood} onUpdateRecipe={updateRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onExportDiagnostics={exportAiDiagnostics} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

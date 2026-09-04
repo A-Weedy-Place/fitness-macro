@@ -2,6 +2,11 @@ export default {
   expo: {
     name: 'Weed Fitness',
     icon: './assets/weed-fitness-icon.png',
+    splash: {
+      image: './assets/weed-fitness-icon.png',
+      resizeMode: 'contain',
+      backgroundColor: '#F7F1E7'
+    },
     slug: 'fitness-macro',
     version: '0.1.0', // x-release-please-version
     orientation: 'portrait',

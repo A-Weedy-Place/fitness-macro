@@ -49,6 +49,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Themes remain static-style based at this point, so changing a palette performs a controlled in-app reload to apply every static surface. A one-time marker restores **You → Appearance & display** after the reload rather than returning the owner to Today. A future dynamic-token refactor can remove this brief reload, but it is not required for correct theme application.
 - Validation in this stage: mobile TypeScript and relay TypeScript pass; the mobile core suite now has 14 tests, including the cup-to-ml regression test. The new native gallery permission wording requires a replacement APK.
 
+## Startup and private AI diagnostics stage — 2026-09-04
+
+- Startup no longer shows the empty temporary root while local diary and lock state load. Native splash configuration uses the Weed Fitness logo, followed by an in-app warm launch screen with the logo, a subtle rotating leaf, and a short local-data message. It sends no request and reads no remote account.
+- AI reliability is now observable: the device records the last 120 assistant, quick-log, and voice events locally. Each event contains the command/transcript when available, reply, proposed action metadata, successful apply count, or error. It intentionally excludes API keys, raw audio, and the full app snapshot.
+- **You → Backup & restore → Share AI diagnostics** creates a deliberate JSON share sheet. The owner can paste or attach that export alongside screenshots; Codex can then diagnose a failed/no-op request from evidence rather than inference. Nothing is uploaded automatically and Codex cannot remotely access the phone’s local data.
+- Fixed a misleading action result: if an approved assistant plan produces no real mutation and no navigation, the app now says that nothing changed and retains the plan instead of falsely reporting success. A direct mutation command that returns an empty plan gets an explicit no-action message. The relay prompt also requires a confirmation-gated action whenever a sufficiently detailed mutation is requested.
+- Current account policy remains intentionally local/device-only. A Google/email account would require a separately designed authenticated backend, consent/privacy policy, recovery, and cloud synchronization; it is not silently introduced merely to collect diagnostics.
+- Validation: mobile TypeScript and all 14 core tests pass; relay TypeScript passes. A new preview APK is required because native splash configuration changed.
+
 ### Standalone relay validation — 2026-08-31
 
 - **You → Connections** now shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains an optional free Android-native integration; Strava is deliberately a later secure-hosted stage.

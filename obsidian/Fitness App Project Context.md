@@ -52,6 +52,15 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 - Themes use a safe static-style reload for complete palette changes. A stored return marker puts the owner back in **You → Appearance & display**, never Today, after selecting a theme. A future dynamic-token refactor can remove the short reload.
 - Stage validation: mobile and relay TypeScript pass; 14 mobile core tests include the cup-to-ml regression. A new APK is required for the expanded native gallery permission wording.
 
+## Startup and private AI diagnostics stage — 2026-09-04
+
+- Native startup now shows the Weed Fitness logo. Once JavaScript loads, a warm launch screen replaces the temporary empty root with a subtle rotating leaf and local-data message; it does not contact a server.
+- The device keeps the last 120 assistant, quick-log, and voice diagnostic events locally: commands/transcripts where available, assistant replies, proposed actions, actual apply counts, and errors. It excludes API keys, raw audio, and the complete app snapshot.
+- **You → Backup & restore → Share AI diagnostics** opens an explicit JSON share sheet. The owner can share it with screenshots for evidence-based debugging; nothing is automatically uploaded and Codex cannot see phone data without that deliberate share.
+- An approved assistant plan that makes no real mutation/no navigation now says that nothing changed instead of falsely reporting success. A detailed mutation request that receives an empty plan gets an explicit no-action result. Relay instructions also require a confirmation plan for sufficiently detailed mutations.
+- Google/email login stays out of this stage. It needs a deliberately designed authentication, recovery, cloud-sync, consent, and privacy system, rather than being added solely to access diagnostics.
+- Validation: mobile TypeScript and 14 core tests pass; relay TypeScript passes. Native splash changes require a replacement APK.
+
 ### Standalone relay validation — 2026-08-31
 
 - **You → Connections** shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains optional and free; Strava is a later secure-hosted stage.

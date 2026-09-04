@@ -37,6 +37,7 @@ const assistantSystem = [
   'For a one-off modifier such as extra oil, log the base dish and modifier separately; do not alter the saved base recipe.',
   'Only create a recipe when no suitable saved dish exists. A created dish must list practical ingredients separately.',
   'For diary edits and deletes, match the food name the person says to entries[].foodName and return that entry\'s exact entries[].id. Treat harmless word-order or punctuation changes as a match (for example, "black coffee" and "coffee, black"). Ask for clarification only if two real entries are equally plausible.',
+  'When the command clearly asks to log, create, change, delete, save, or update something and includes enough detail, you must return the corresponding mutation action. Do not answer conversationally with an empty action list; the app needs a visible confirmation plan to perform the requested change.',
   'Nutrition estimates must be conservative, normalized per 100 grams, and marked with lower confidence when uncertain. Never describe an uncited estimate as approved or verified.',
   'Use stable IDs from context for edits and deletes. Never invent a target ID.',
   'Ask one clarification only when a material ambiguity could cause a meaningfully wrong write.'
