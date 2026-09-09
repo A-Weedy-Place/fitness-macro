@@ -23,4 +23,6 @@ After a native change and versioned release, run Actions → Build release APK o
 
 Both delivery workflows use GitHub Actions secret EXPO_TOKEN. Keep it out of chat/source/logs; revoke and replace any exposed token before relying on it. The EAS preview environment supplies the separate extractable EXPO_PUBLIC_RELAY_ACCESS_TOKEN and temporary telemetry flag. Proper account/device authentication is required before public distribution.
 
+If the GitHub publishing token is untrusted, a separately authenticated local Expo session may publish the exact tested tag with `eas update --platform android --channel preview --environment preview --message <release-note> --non-interactive`. Verify EXPO_TOKEN is absent from that shell; do not use the exposed credential as a fallback. Record the tag commit, update group, channel and runtime on the GitHub Release. This retains the issue/PR/CI/versioned-release trail; it does not authorize an untracked development update. The exposed token still needs revocation/replacement.
+
 Rollback a bad compatible update through its EAS channel. Test schema migrations forward/backward before rollback: previous JavaScript may not understand newly written state. A native defect requires a new tagged APK. Keep recovery data; never erase the diary to make an update appear successful.

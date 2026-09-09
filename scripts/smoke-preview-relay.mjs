@@ -28,6 +28,8 @@ for (const protocol of [true, false]) {
   const plan = await request('/v1/assistant/plan', protocol, { command: 'Log 150 ml of Milk, low fat 2% at 08:00 today. Use my saved milk.', context });
   const action = plan.actions?.find(item => item.type === 'log_foods');
   assert.ok(action, 'Expected an executable food proposal.');
+  assert.equal(action.date, '2026-09-09', 'The proposed diary day must match the command.');
+  assert.equal(action.time, '08:00', 'The proposed clock time must match the command.');
   const item = action.ingredients?.find(item => /milk/i.test(item.name));
   assert.ok(item, 'Expected the saved milk.');
   const grams = protocol ? item.quantity * (item.unit === 'ml' || item.unit === 'g' ? 1 : item.gramsPerUnit) : item.quantity * 244;
