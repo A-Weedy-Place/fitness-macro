@@ -8,7 +8,7 @@ const base = process.env.EXPO_PUBLIC_RELAY_URL || 'https://fitness-macro-relay.f
 async function request(path, protocol, body) {
   const response = await fetch(`${base}${path}`, {
     method: body ? 'POST' : 'GET',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...(protocol ? { 'X-Weed-Fitness-Protocol': '2' } : {}) },
+    headers: { 'x-fitnessmacro-app-token': token.trim(), 'content-type': 'application/json', ...(protocol ? { 'X-Weed-Fitness-Protocol': '2' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(115_000)
   });
   const value = await response.json();
