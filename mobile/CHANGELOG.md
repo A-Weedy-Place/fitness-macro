@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.2...v0.2.3) (2026-09-09)
+
+
+### Bug Fixes
+
+* harden diary, AI, health sync and preview updates ([e866beb](https://github.com/A-Weedy-Place/fitness-macro/commit/e866beb76ab469bc8f801f855088484c69402e36))
+
 ## [0.2.2](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.1...v0.2.2) (2026-09-04)
 
 
