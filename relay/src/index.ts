@@ -5,6 +5,7 @@ import { assistantFoodPortion, canonicalAssistantUnit } from '../../mobile/src/l
 import type { AssistantAction, FoodItem, UserProfile } from '../../mobile/src/types';
 import { consumeRouteBudget, routeBucket, retryAfterSeconds } from './rateLimits';
 import { lookupRecipeReference, type RecipeReference, referenceTitleMatches } from './recipeReferences';
+import { legacyAssistantPlan, legacyFoodResolution, supportsExactPortions } from './protocol';
 
 interface Env {
   GROQ_API_KEY?: string;
@@ -19,7 +20,7 @@ const jsonHeaders = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store',
   'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'content-type, x-fitnessmacro-app-token, x-audio-filename',
+  'access-control-allow-headers': 'content-type, x-fitnessmacro-app-token, x-audio-filename, x-weed-fitness-protocol',
   'access-control-allow-methods': 'GET, POST, OPTIONS'
 };
 const encoder = new TextEncoder();
@@ -624,9 +625,13 @@ export default {
       if (request.method === 'POST' && path === '/v1/assistant/plan') {
         const input = await readJson(request); const command = boundedString(input.command); if (!command) throw new Error('invalid_request');
         const compact = compactAppContext(command, input.context);
-        return respond(200, await createAssistantPlan(command, compact, env));
+        const plan = await createAssistantPlan(command, compact, env);
+        return respond(200, supportsExactPortions(request) ? plan : legacyAssistantPlan(plan, input.context));
       }
-      if (request.method === 'POST' && path === '/v1/agent/command') return respond(200, await resolveFood(await readJson(request), env));
+      if (request.method === 'POST' && path === '/v1/agent/command') {
+        const resolution = await resolveFood(await readJson(request), env);
+        return respond(200, supportsExactPortions(request) ? resolution : legacyFoodResolution(resolution));
+      }
       if (request.method === 'POST' && path === '/v1/goals/recommendation') return respond(200, await nutritionProgram(await readJson(request), env));
       if (request.method === 'POST' && path === '/v1/test-telemetry') return respond(200, await storeTestTelemetry(await readJson(request), env));
       if (request.method === 'POST' && path === '/v1/test-telemetry/reset') return respond(200, await resetTestTelemetry(await readJson(request), env));

@@ -114,7 +114,7 @@ test('quick-log resolution converts a non-default spoon to explicit grams and ig
   const original = globalThis.fetch;
   globalThis.fetch = async () => Response.json({ choices: [{ message: { content: JSON.stringify({ intent: 'log_foods', title: 'Milk', summary: 'Milk', dishName: null, dishServings: 1, logServings: 1, logDate: '2026-09-09', eatenAt: '13:30', clarification: null, foods: [{ ...ingredient, existingFoodId: 'milk', quantity: 2, unit: 'tbsp', gramsPerUnit: 14, sourceUrl: 'https://fake.invalid/made-up' }], notes: [] }) } }] });
   try {
-    const response = await worker.fetch(new Request('https://relay.test/v1/agent/command', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test' }, body: JSON.stringify({ transcript: 'Milk', defaultDate: '2026-09-09', defaultTime: '13:30', context: { userFoods: [milk] } }) }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+    const response = await worker.fetch(new Request('https://relay.test/v1/agent/command', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test', 'x-weed-fitness-protocol': '2' }, body: JSON.stringify({ transcript: 'Milk', defaultDate: '2026-09-09', defaultTime: '13:30', context: { userFoods: [milk] } }) }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
     assert.equal(response.status, 200);
     const result = await response.json() as { suggestions: Array<{ quantity: number; unit: string; sourceUrl?: string }> };
     assert.equal(result.suggestions[0].quantity, 28); assert.equal(result.suggestions[0].unit, 'g'); assert.equal(result.suggestions[0].sourceUrl, undefined);

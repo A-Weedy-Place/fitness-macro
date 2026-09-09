@@ -52,7 +52,7 @@ function friendlyError(status: number, body: string): Error {
 
 function headers(contentType = 'application/json'): Record<string, string> {
   if (!BUILD_ACCESS_TOKEN) throw missingBuildToken();
-  return { 'content-type': contentType, 'x-fitnessmacro-app-token': BUILD_ACCESS_TOKEN };
+  return { 'content-type': contentType, 'x-fitnessmacro-app-token': BUILD_ACCESS_TOKEN, 'x-weed-fitness-protocol': '2' };
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
