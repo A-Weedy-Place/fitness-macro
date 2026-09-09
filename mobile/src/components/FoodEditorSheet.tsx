@@ -1,4 +1,5 @@
 import { themedStyles } from '../theme';
+import { dismissKeyboardFirst } from '../hooks/useAndroidBack';
 import React, { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -22,6 +23,14 @@ export function FoodEditorSheet({ food, onClose, onSave }: { food: FoodItem | nu
   }, [food?.id]);
   if (!food) return null;
   const currentFood = food;
+  function closeEditor() {
+    if (saveInFlight.current || dismissKeyboardFirst()) return;
+    const dirty = name !== currentFood.name || brand !== (currentFood.brand || '') || emoji !== (currentFood.emoji || '') || imageUri !== currentFood.imageUri || Number(grams) !== currentFood.serving.gramsPerUnit || Number(calories) !== currentFood.nutrition.calories || Number(protein) !== currentFood.nutrition.protein || Number(carbs) !== currentFood.nutrition.carbs || Number(fat) !== currentFood.nutrition.fat;
+    if (!dirty) return onClose();
+    Alert.alert('Discard food edits?', 'Your saved food will stay unchanged.', [
+      { text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: onClose }
+    ]);
+  }
 
   async function pickImage() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -42,8 +51,8 @@ export function FoodEditorSheet({ food, onClose, onSave }: { food: FoodItem | nu
     finally { saveInFlight.current = false; setSaving(false); }
   }
 
-  return <Modal visible animationType="slide" navigationBarTranslucent={false} statusBarTranslucent={false} onRequestClose={() => { if (!saveInFlight.current) onClose(); }}><SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
-    <View style={styles.top}><Pressable style={styles.close} disabled={saving} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.title}>Edit food</Text><View style={styles.spacer} /></View>
+  return <Modal visible animationType="slide" navigationBarTranslucent={false} statusBarTranslucent={false} onRequestClose={closeEditor}><SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
+    <View style={styles.top}><Pressable style={styles.close} disabled={saving} onPress={closeEditor}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.title}>Edit food</Text><View style={styles.spacer} /></View>
     <ScrollView pointerEvents={saving ? 'none' : 'auto'} contentContainerStyle={[styles.content, { paddingBottom: Math.max(42, insets.bottom + 24) }]} showsVerticalScrollIndicator={false}>
       <View style={styles.visual}>{imageUri ? <Image source={{ uri: imageUri }} style={styles.photo} /> : <Text style={styles.emoji}>{foodEmoji({ ...food, emoji })}</Text>}<View style={styles.visualActions}><Button label="Choose photo" compact tone="secondary" onPress={() => void pickImage()} />{imageUri ? <Button label="Remove photo" compact tone="ghost" onPress={() => setImageUri(undefined)} /> : null}</View></View>
       <Field label="Food name" value={name} onChangeText={setName} /><Field label="Brand (optional)" value={brand} onChangeText={setBrand} />

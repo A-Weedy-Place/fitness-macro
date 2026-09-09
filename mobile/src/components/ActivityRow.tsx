@@ -24,7 +24,7 @@ const styles = themedStyles(() => ({
   copy: { flex: 1 },
   name: { color: colors.ink, fontWeight: '700' },
   meta: { color: colors.muted, marginTop: 3 },
-  energy: { color: colors.pine, fontWeight: '800' },
+  energy: { color: colors.actionText, fontWeight: '800' },
   remove: { marginLeft: 9, backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
   delete: { color: colors.danger, fontSize: 9, fontWeight: '900' }
 }));

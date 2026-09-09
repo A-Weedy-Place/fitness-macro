@@ -1,8 +1,9 @@
 name: Prepare release
 
 on:
-  push:
-    branches: [main]
+  # Optional larger-release tooling. Small preview patches carry their version in
+  # the feature PR so publishing does not need a second bot PR / second CI pass.
+  workflow_dispatch:
 
 permissions:
   contents: write

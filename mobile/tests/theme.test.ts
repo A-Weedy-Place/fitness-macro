@@ -45,3 +45,24 @@ test('failed appearance persistence leaves the displayed theme and subscriptions
   assert.throws(() => theme.saveAppTheme('ocean'), /disk_full/);
   assert.equal(theme.activeTheme, 'warm'); assert.equal(notifications(), 0);
 });
+
+function contrast(a: string, b: string) {
+  function luminance(hex: string) {
+    const rgb = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255)
+      .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  }
+  const x = luminance(a), y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+test('action text and selected navigation foregrounds remain readable in every palette', () => {
+  const { theme } = loadTheme();
+  for (const name of ['warm', 'neutral', 'charcoal', 'ocean', 'orchid']) {
+    theme.saveAppTheme(name); const c = theme.colors;
+    for (const surface of [c.paper, c.card, c.pineSoft]) assert.ok(contrast(c.actionText, surface) >= 4.5, `${name}: action text`);
+    assert.ok(contrast(c.onStrong, c.ink) >= 4.5, `${name}: selected navigation`);
+  }
+  theme.saveAppTheme('charcoal');
+  assert.ok(contrast(theme.colors.onPrimary, theme.colors.coral) >= 4.5);
+});

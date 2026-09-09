@@ -121,7 +121,7 @@ const styles = themedStyles(() => ({
   versionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   versionCopy: { flex: 1 },
   version: { color: colors.ink, fontSize: 15, fontWeight: '900' },
-  meta: { color: colors.pine, fontSize: 8.5, fontWeight: '900', letterSpacing: 1.2, marginTop: 4 },
+  meta: { color: colors.actionText, fontSize: 8.5, fontWeight: '900', letterSpacing: 1.2, marginTop: 4 },
   statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.faint },
   statusDotReady: { backgroundColor: colors.coral },
   detail: { color: colors.muted, fontSize: 11, lineHeight: 17, marginBottom: 5 },

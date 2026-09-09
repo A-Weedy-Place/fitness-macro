@@ -27,7 +27,7 @@ const styles = themedStyles(() => ({
     color: colors.ink
   },
   value: {
-    color: colors.pine,
+    color: colors.actionText,
     fontWeight: '800'
   },
   copy: { flex: 1 },
