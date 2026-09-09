@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
@@ -112,7 +113,7 @@ export function ConsistencyGrid({ points }: { points: Array<{ logged: boolean; c
   })}</View>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   empty: { height: 170, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
   emptyText: { color: colors.muted, textAlign: 'center', lineHeight: 19 },
   donutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
@@ -125,4 +126,4 @@ const styles = StyleSheet.create({
   gridCell: { width: 14, height: 14, borderRadius: 4, backgroundColor: colors.paperDeep },
   gridLogged: { backgroundColor: colors.muted },
   gridTarget: { backgroundColor: colors.pine }
-});
+}));

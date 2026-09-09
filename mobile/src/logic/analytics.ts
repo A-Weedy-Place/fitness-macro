@@ -1,7 +1,9 @@
 import { ActivityEntry, BodyMetricLog, DailyGoal, FoodEntry, FoodItem, UserProfile } from '../types';
 import { recommendDailyGoal } from './tdee';
 import { sumNutrition } from './nutrition';
-import { shiftDate } from '../utils/dates';
+import { shiftDate, today } from '../utils/dates';
+
+export type GoalHistoryPoint = Omit<DailyGoal, 'date'> & { effectiveFrom: string };
 
 export interface DailyAnalyticsPoint {
   date: string;
@@ -21,8 +23,13 @@ export function dateWindow(endDate: string, days: number): string[] {
   return Array.from({ length: days }, (_, index) => shiftDate(endDate, index - days + 1));
 }
 
-export function goalForDate(goals: DailyGoal[], profile: UserProfile | undefined, date: string): DailyGoal | undefined {
-  return goals.find((goal) => goal.date === date) || (profile ? recommendDailyGoal(profile, date) : undefined);
+export function goalForDate(goals: DailyGoal[], profile: UserProfile | undefined, date: string, history: GoalHistoryPoint[] = [], currentDate = today(profile?.timeZone)): DailyGoal | undefined {
+  const exact = goals.find((goal) => goal.date === date);
+  if (exact) return exact;
+  const effective = [...history].filter((goal) => goal.effectiveFrom <= date).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  if (effective) { const { effectiveFrom: _, ...goal } = effective; return { ...goal, date }; }
+  // Do not silently rewrite old adherence using the owner's current profile.
+  return profile && date >= currentDate ? recommendDailyGoal(profile, date) : undefined;
 }
 
 export function buildDailySeries(input: {
@@ -33,12 +40,13 @@ export function buildDailySeries(input: {
   activities: ActivityEntry[];
   goals: DailyGoal[];
   profile?: UserProfile;
+  goalHistory?: GoalHistoryPoint[];
 }): DailyAnalyticsPoint[] {
   return dateWindow(input.endDate, input.days).map((date) => {
     const entries = input.entries.filter((entry) => entry.date === date);
     const activities = input.activities.filter((activity) => activity.date === date);
     const nutrition = sumNutrition(entries, input.foods);
-    const goal = goalForDate(input.goals, input.profile, date);
+    const goal = goalForDate(input.goals, input.profile, date, input.goalHistory);
     return {
       date,
       label: date.slice(5).replace('-', '/'),

@@ -9,6 +9,10 @@ export interface NutritionTotals {
 }
 
 export function nutritionForEntry(entry: FoodEntry, food: FoodItem): NutritionTotals {
+  if (entry.nutritionSnapshot) {
+    const { calories, protein, carbs, fat } = entry.nutritionSnapshot;
+    return { calories, protein, carbs, fat };
+  }
   // A diary item keeps the display unit selected by the owner. Never treat a
   // value entered as millilitres as if it were the food's default cup/serving.
   const grams = gramsForQuantity(food, entry.portion.quantity, entry.portion.unit);

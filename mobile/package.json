@@ -11,7 +11,7 @@
     "apk:preview": "npx eas-cli@latest build --platform android --profile preview",
     "apk:development": "npx eas-cli@latest build --platform android --profile development",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx tests/core.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

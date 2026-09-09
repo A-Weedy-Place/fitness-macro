@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -150,7 +151,7 @@ export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (ta
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   page: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 108 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   headerCopy: { flex: 1, paddingRight: 12 },
@@ -201,4 +202,4 @@ const styles = StyleSheet.create({
   tabMarkSelected: { backgroundColor: colors.ink },
   tabLabel: { color: colors.muted, fontSize: 8, fontWeight: '800', marginTop: 3 },
   tabLabelSelected: { color: colors.ink }
-});
+}));

@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { ProfileInput } from '../types';
@@ -57,4 +58,4 @@ export function OnboardingScreen({ date, onComplete }: { date: string; onComplet
   </Page>;
 }
 
-const styles = StyleSheet.create({ progress: { flexDirection: 'row', gap: 6, marginBottom: 22 }, progressBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.line }, progressActive: { backgroundColor: colors.pine }, hero: { color: colors.ink, fontFamily: 'serif', fontWeight: '900', fontSize: 27 }, heroCopy: { color: colors.muted, lineHeight: 19, marginTop: 8 }, label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 7 }, columns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }, help: { color: colors.muted, fontSize: 11, lineHeight: 17, marginBottom: 12 }, actions: { flexDirection: 'row', gap: 9 }, flex: { flex: 1 }, metrics: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 14 }, gap: { height: 8 } });
+const styles = themedStyles(() => ({ progress: { flexDirection: 'row', gap: 6, marginBottom: 22 }, progressBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: colors.line }, progressActive: { backgroundColor: colors.pine }, hero: { color: colors.ink, fontFamily: 'serif', fontWeight: '900', fontSize: 27 }, heroCopy: { color: colors.muted, lineHeight: 19, marginTop: 8 }, label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 7 }, columns: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }, help: { color: colors.muted, fontSize: 11, lineHeight: 17, marginBottom: 12 }, actions: { flexDirection: 'row', gap: 9 }, flex: { flex: 1 }, metrics: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 14 }, gap: { height: 8 } }));

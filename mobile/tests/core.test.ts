@@ -123,9 +123,9 @@ test('goal pace is derived from deadline and capped by body weight', () => {
   assert.equal(weekly, -0.75);
 });
 
-test('portable backup migrates to schema 7 without connection data', () => {
-  const state = restorePortableBackup(createPortableBackup({ version: 7, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [] }));
-  assert.equal(state.version, 7);
+test('portable backup migrates to schema 8 without connection data', () => {
+  const state = restorePortableBackup(createPortableBackup({ version: 8, foods: [food], entries: [entry('backup', '2026-08-07')], weights: [], activities: [], goals: [], plans: [], recipes: [] }));
+  assert.equal(state.version, 8);
   assert.equal(state.entries[0].eatenAt, '13:00');
 });
 
@@ -138,7 +138,7 @@ test('startup migration tolerates partial legacy collections without discarding 
     plans: [{ id: 'partial_plan', name: 'Old plan', items: null, createdAt: null, updatedAt: null }],
     recipes: [{ id: 'partial_recipe', name: 'Old dish', foodId: food.id, servings: 1, finalWeightGrams: 100, ingredients: null, createdAt: '', updatedAt: '' }]
   });
-  assert.equal(state.version, 7);
+  assert.equal(state.version, 8);
   assert.ok(state.foods.some((item) => item.id === food.id));
   assert.equal(state.entries[0].eatenAt, '13:00');
   assert.equal(state.weights[0].weightKg, 82.5);
@@ -181,8 +181,13 @@ test('recipe nutrition accounts for ingredient mass and final cooked weight', ()
 
 test('adaptive expenditure combines logged intake with weight direction', () => {
   const series = Array.from({ length: 14 }, (_, index) => ({ date: `2026-08-${String(index + 1).padStart(2, '0')}`, label: '', calories: 2200, protein: 100, carbs: 200, fat: 70, activityCalories: 0, activityMinutes: 0, logged: true }));
-  const weights = [{ id: 'start', date: '2026-08-01', weightKg: 90, enteredAt: '' }, { id: 'end', date: '2026-08-14', weightKg: 89.5, enteredAt: '' }];
-  const result = estimateAdaptiveExpenditure(series, weights, 2500);
+  const weights = [
+    { id: 'start', date: '2026-08-01', weightKg: 90, enteredAt: '' },
+    { id: 'second', date: '2026-08-05', weightKg: 89.85, enteredAt: '' },
+    { id: 'third', date: '2026-08-10', weightKg: 89.68, enteredAt: '' },
+    { id: 'end', date: '2026-08-15', weightKg: 89.5, enteredAt: '' }
+  ];
+  const result = estimateAdaptiveExpenditure(series, weights, 2500, { completedFoodDays: series.map((day) => day.date), today: '2026-08-15' });
   assert.equal(result.status, 'updating');
   assert.ok(result.estimate >= 2450 && result.estimate <= 2550);
 });
@@ -203,7 +208,7 @@ test('incomplete assistant food actions are blocked before Apply', () => {
     value: null, quantity: null, servings: null, durationMinutes: null, calories: null, protein: null, carbs: null, fat: null,
     displayName: null, targetWeightKg: null, activityFactor: null, goalMode: null, goalIntensity: null, targetDate: null, destination: null, ingredients: []
   };
-  assert.match(assistantActionIssue(base, EMPTY_STATE, '2026-09-04') || '', /missing its amount|nutrition/);
+  assert.match(assistantActionIssue(base, EMPTY_STATE, '2026-09-04') || '', /ingredients are missing/);
   const valid = { ...base, ingredients: [{ name: 'Chicken biryani', brand: null, quantity: 2, unit: 'plate', gramsPerUnit: 350, caloriesPer100g: 190, proteinPer100g: 9, carbsPer100g: 24, fatPer100g: 6, confidence: 0.7 }] };
   assert.equal(assistantActionIssue(valid, EMPTY_STATE, '2026-09-04'), null);
 });

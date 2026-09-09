@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { FoodEntry, FoodItem } from '../types';
@@ -14,4 +15,4 @@ export function DayTimeline({ entries, foods, onAddAt, onDelete, onOpenEntry }: 
 
 function formatTime(time: string) { const hour = Number(time.slice(0, 2)); const minute = time.slice(3); const suffix = hour >= 12 ? 'PM' : 'AM'; const display = hour % 12 || 12; return `${display}:${minute} ${suffix}`; }
 
-const styles = StyleSheet.create({ timeline: { paddingTop: 3 }, group: { flexDirection: 'row' }, timeRail: { width: 69, alignItems: 'center' }, timePill: { backgroundColor: colors.paperDeep, borderRadius: 16, paddingHorizontal: 9, paddingVertical: 6, zIndex: 2 }, timeText: { color: colors.ink, fontSize: 9, fontWeight: '800' }, rail: { width: 1, backgroundColor: colors.line, flex: 1, minHeight: 48 }, foods: { flex: 1, paddingLeft: 7, paddingBottom: 7 }, empty: { alignItems: 'center', paddingVertical: 30 }, emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' }, emptyDetail: { color: colors.muted, fontSize: 10, marginTop: 5 } });
+const styles = themedStyles(() => ({ timeline: { paddingTop: 3 }, group: { flexDirection: 'row' }, timeRail: { width: 69, alignItems: 'center' }, timePill: { backgroundColor: colors.paperDeep, borderRadius: 16, paddingHorizontal: 9, paddingVertical: 6, zIndex: 2 }, timeText: { color: colors.ink, fontSize: 9, fontWeight: '800' }, rail: { width: 1, backgroundColor: colors.line, flex: 1, minHeight: 48 }, foods: { flex: 1, paddingLeft: 7, paddingBottom: 7 }, empty: { alignItems: 'center', paddingVertical: 30 }, emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' }, emptyDetail: { color: colors.muted, fontSize: 10, marginTop: 5 } }));

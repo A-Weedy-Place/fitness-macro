@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
@@ -36,7 +37,7 @@ export function CalendarPicker({ label, value, onChange, minDate }: { label: str
   </>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   label: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, marginBottom: 6 },
   field: { minHeight: 47, borderRadius: 16, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper, paddingHorizontal: 13, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   value: { color: colors.ink, fontWeight: '800' }, icon: { color: colors.coral, fontSize: 9, fontWeight: '900' },
@@ -45,4 +46,4 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }, month: { color: colors.ink, fontFamily: 'serif', fontSize: 21, fontWeight: '900' }, arrow: { color: colors.coral, fontSize: 32, paddingHorizontal: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' }, weekday: { width: '14.285%', textAlign: 'center', color: colors.faint, fontSize: 10, fontWeight: '900', paddingVertical: 8 },
   day: { width: '14.285%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 999 }, dayText: { color: colors.ink, fontWeight: '700' }, selected: { backgroundColor: colors.pine }, selectedText: { color: colors.white }, disabled: { color: colors.line }
-});
+}));

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import { themedStyles } from '../theme';
+import React, { useMemo, useRef, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -11,13 +12,15 @@ import { FoodEditorSheet } from '../components/FoodEditorSheet';
 import { foodEmoji } from '../logic/foodVisual';
 import { currentTime } from '../logic/time';
 import { colors } from '../theme';
+import { manualFoodIssue } from '../logic/manualInput';
 
 type CustomFoodValues = { name: string; brand?: string; servingGrams: number; calories: number; protein: number; carbs: number; fat: number };
 type ResolveResult = { foods: FoodItem[]; quantities: Record<string, number>; notes: string[] };
 
-export function LibraryScreen({ state, date: _date, initialTime: _initialTime, timeZone, onSearch, onBarcode, onResolve, onTranscribe, onAdd, onCreateCustom, onCreateRecipe, onUpdateFood, onUpdateRecipe }: { state: AppState; date: string; initialTime: string; timeZone?: string; onSearch: (query: string) => Promise<FoodItem[]>; onBarcode: (code: string) => Promise<FoodItem>; onResolve: (phrase: string) => Promise<ResolveResult>; onTranscribe: (uri: string) => Promise<string>; onAdd: (food: FoodItem, quantity: number, eatenAt: string, note?: string) => void; onCreateCustom: (values: CustomFoodValues) => Promise<FoodItem>; onCreateRecipe: (input: RecipeInput) => Promise<FoodItem>; onUpdateFood: (food: FoodItem) => Promise<void>; onUpdateRecipe: (recipeId: string, input: RecipeInput) => Promise<FoodItem> }) {
+export function LibraryScreen({ state, date: _date, initialTime: _initialTime, timeZone, onSearch, onBarcode, onResolve, onTranscribe, onAdd, onCreateCustom, onCreateRecipe, onUpdateFood, onUpdateRecipe }: { state: AppState; date: string; initialTime: string; timeZone?: string; onSearch: (query: string) => Promise<FoodItem[]>; onBarcode: (code: string) => Promise<FoodItem>; onResolve: (phrase: string) => Promise<ResolveResult>; onTranscribe: (uri: string) => Promise<string>; onAdd: (food: FoodItem, quantity: number, eatenAt: string, note?: string) => Promise<void>; onCreateCustom: (values: CustomFoodValues) => Promise<FoodItem>; onCreateRecipe: (input: RecipeInput) => Promise<FoodItem>; onUpdateFood: (food: FoodItem) => Promise<void>; onUpdateRecipe: (recipeId: string, input: RecipeInput) => Promise<FoodItem> }) {
   const [mode, setMode] = useState<'search' | 'voice' | 'scan'>('search'); const [query, setQuery] = useState(''); const [results, setResults] = useState<FoodItem[]>([]); const [selected, setSelected] = useState<FoodItem | null>(null); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [scannerOpen, setScannerOpen] = useState(false); const [cameraPermission, requestCameraPermission] = useCameraPermissions(); const [showCustom, setShowCustom] = useState(false); const [showRecipe, setShowRecipe] = useState(false); const [showCookbook, setShowCookbook] = useState(false); const [editingFood, setEditingFood] = useState<FoodItem | null>(null); const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [customName, setCustomName] = useState(''); const [customBrand, setCustomBrand] = useState(''); const [customServing, setCustomServing] = useState('100'); const [customCalories, setCustomCalories] = useState(''); const [customProtein, setCustomProtein] = useState(''); const [customCarbs, setCustomCarbs] = useState(''); const [customFat, setCustomFat] = useState('');
+  const customSaving = useRef(false); const quickSaving = useRef(false);
   const recipeByFood = useMemo(() => new Map(state.recipes.map((recipe) => [recipe.foodId, recipe])), [state.recipes]);
   const recent = useMemo(() => { const foods = new Map(state.foods.map((food) => [food.id, food])); const seen = new Set<string>(); return [...state.entries].sort((a, b) => b.enteredAt.localeCompare(a.enteredAt)).flatMap((entry) => { if (seen.has(entry.foodId)) return []; seen.add(entry.foodId); const food = foods.get(entry.foodId); return food ? [food] : []; }).slice(0, 10); }, [state.foods, state.entries]);
   const personalRecipes = useMemo(() => state.recipes.filter((recipe) => recipe.reviewStatus === 'manual' || !state.foods.find((food) => food.id === recipe.foodId)?.tags?.includes('ai-created')), [state.recipes, state.foods]);
@@ -29,9 +32,24 @@ export function LibraryScreen({ state, date: _date, initialTime: _initialTime, t
   async function transcribe(uri: string) { try { const transcript = await onTranscribe(uri); setQuery(transcript); setMessage('Transcript ready — review it, then tap Ask AI.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Voice failed.'); throw error; } }
   async function openScanner() { const permission = cameraPermission?.granted ? cameraPermission : await requestCameraPermission(); if (!permission.granted) return Alert.alert('Camera needed', 'Allow camera access to scan barcodes.'); setScannerOpen(true); }
   async function scanned(code: string) { setScannerOpen(false); setQuery(code); try { const food = await onBarcode(code); setResults([food]); setSelected(food); } catch { setMessage('Barcode not found. Create the product from its label.'); } }
-  function quickAdd(food: FoodItem) { onAdd(food, food.serving.amount, currentTime(timeZone)); setMessage(`${food.name} logged now.`); }
+  async function quickAdd(food: FoodItem) {
+    if (quickSaving.current) return;
+    quickSaving.current = true;
+    try { await onAdd(food, food.serving.amount, currentTime(timeZone)); setMessage(`${food.name} logged now.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Food was not saved. Please try again.'); }
+    finally { quickSaving.current = false; }
+  }
   function openCustomForQuery() { setCustomName(query.trim()); setShowCustom(true); setShowRecipe(false); }
-  async function createCustom() { const values = [customServing, customCalories, customProtein, customCarbs, customFat].map(Number); if (!customName.trim() || values.some((value) => !Number.isFinite(value)) || values[0] <= 0) return Alert.alert('Check values', 'Enter the food name and valid label values.'); const food = await onCreateCustom({ name: customName.trim(), brand: customBrand.trim() || undefined, servingGrams: values[0], calories: values[1], protein: values[2], carbs: values[3], fat: values[4] }); setSelected(food); setShowCustom(false); }
+  async function createCustom() {
+    if (customSaving.current) return;
+    const values: CustomFoodValues = { name: customName.trim(), brand: customBrand.trim() || undefined, servingGrams: Number(customServing), calories: Number(customCalories), protein: Number(customProtein), carbs: Number(customCarbs), fat: Number(customFat) };
+    const issue = manualFoodIssue(values);
+    if (issue) return Alert.alert('Check values', issue);
+    customSaving.current = true; setBusy(true);
+    try { const food = await onCreateCustom(values); setSelected(food); setShowCustom(false); }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Custom food was not saved. Your entered values were kept.'); }
+    finally { customSaving.current = false; setBusy(false); }
+  }
   function editRecipe(recipe: Recipe) { setEditingRecipe(recipe); setShowRecipe(true); setShowCustom(false); }
   const mark = (food: FoodItem, style: 'row' | 'recent' = 'row') => food.imageUri ? <Image source={{ uri: food.imageUri }} style={style === 'recent' ? styles.recentPhoto : styles.photo} /> : <Text style={style === 'recent' ? styles.recentEmoji : styles.emoji}>{foodEmoji(food)}</Text>;
   const row = (food: FoodItem) => { const recipe = recipeByFood.get(food.id); const provenance = recipe?.reviewStatus === 'reference_reviewed' ? 'Reviewed reference' : recipe?.reviewStatus === 'ai_estimated' || food.tags?.includes('ai-created') ? 'AI recipe' : recipe ? 'Personal recipe' : food.source.source === 'usda' ? 'USDA reference' : food.source.source === 'openfoodfacts' ? 'Open Food Facts' : food.tags?.includes('starter') ? 'Starter reference' : 'Saved food'; return <Pressable key={food.id} style={styles.row} onPress={() => setSelected(food)}>{mark(food)}<View style={styles.copy}><Text style={styles.name} numberOfLines={2}>{food.name}</Text><Text style={styles.meta}>{provenance} · {food.nutrition.calories.toFixed(0)} kcal · {food.nutrition.protein.toFixed(0)}P · {food.nutrition.fat.toFixed(0)}F · {food.nutrition.carbs.toFixed(0)}C /100g</Text></View><Pressable style={styles.plus} hitSlop={8} onPress={(event) => { event.stopPropagation(); quickAdd(food); }}><Text style={styles.plusText}>+</Text></Pressable></Pressable>; };
@@ -54,6 +72,6 @@ export function LibraryScreen({ state, date: _date, initialTime: _initialTime, t
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   bookButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paperDeep }, searchRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 }, searchField: { flex: 1 }, message: { color: colors.coral, fontSize: 9, lineHeight: 14, marginBottom: 10 }, recent: { gap: 9, paddingBottom: 14 }, recentItem: { width: 94, minHeight: 128, backgroundColor: colors.card, borderRadius: 17, borderWidth: 1, borderColor: colors.line, alignItems: 'center', padding: 9 }, recentEmoji: { fontSize: 31, height: 39 }, recentPhoto: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.paperDeep }, recentName: { color: colors.ink, fontSize: 9, lineHeight: 12, fontWeight: '800', textAlign: 'center', marginTop: 5 }, recentPlus: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', marginTop: 'auto' }, plusText: { color: colors.ink, fontSize: 21, lineHeight: 22 }, listCard: { paddingVertical: 2 }, emptyCopy: { color: colors.muted, lineHeight: 18, paddingVertical: 14 }, row: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 9, borderBottomWidth: 1, borderColor: colors.line, paddingHorizontal: 5, paddingVertical: 9 }, emoji: { width: 40, fontSize: 29, textAlign: 'center' }, photo: { width: 37, height: 37, borderRadius: 11, backgroundColor: colors.paperDeep, marginHorizontal: 2 }, copy: { flex: 1, flexShrink: 1 }, name: { color: colors.ink, fontSize: 12, lineHeight: 16, fontWeight: '800' }, meta: { color: colors.muted, fontSize: 8, lineHeight: 12, marginTop: 5 }, plus: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', marginLeft: 2 }, actions: { flexDirection: 'row', gap: 7, marginVertical: 10 }, grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }, half: { width: '48.5%' }, customHint: { color: colors.muted, fontSize: 9, lineHeight: 13, marginBottom: 10 }, cookbookHint: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }, cookbookTitle: { flexDirection: 'row', alignItems: 'center', gap: 7 }, cameraFrame: { height: 240, borderRadius: 18, overflow: 'hidden', marginBottom: 10, backgroundColor: colors.ink }, camera: { flex: 1 }, scanGuide: { position: 'absolute', left: '12%', right: '12%', top: '33%', bottom: '33%', borderWidth: 2, borderColor: colors.gold, borderRadius: 12 }
-});
+}));

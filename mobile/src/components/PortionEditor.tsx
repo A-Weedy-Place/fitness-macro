@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import { Pressable, ScrollView, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { FoodItem } from '../types';
@@ -18,12 +19,11 @@ export function PortionEditor({ food, quantity, unit, onQuantityChange, onUnitCh
   </View>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   units: { gap: 5, paddingBottom: 5 },
   unit: { minWidth: 39, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card, alignItems: 'center' },
   unitSelected: { backgroundColor: colors.pine, borderColor: colors.pine },
   unitText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
   unitTextSelected: { color: colors.white },
   helper: { color: colors.faint, fontSize: 9, marginTop: 1, marginBottom: 8 }
-});
-
+}));

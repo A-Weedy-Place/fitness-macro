@@ -9,6 +9,7 @@ const BUILD_ACCESS_TOKEN = process.env.EXPO_PUBLIC_RELAY_ACCESS_TOKEN?.trim() ||
 
 class RelayError extends Error {
   code: string;
+  retryAfterSeconds?: number;
 
   constructor(code: string, message: string) {
     super(message);
@@ -33,7 +34,13 @@ function missingBuildToken(): Error {
 function friendlyError(status: number, body: string): Error {
   const code = responseCode(body);
   if (status === 401) return missingBuildToken();
-  if (status === 429) return new RelayError(code, 'The free AI service is temporarily at its limit. Please try again later.');
+  if (status === 429) {
+    let retry = 60;
+    try { retry = Math.max(1, Math.min(3600, Number(JSON.parse(body).retryAfterSeconds) || 60)); } catch { /* Use a bounded retry hint. */ }
+    const source = code.startsWith('relay_') ? 'This app’s request allowance' : 'Groq’s free allowance';
+    const error = new RelayError(code, `${source} is temporarily reached. Try again in about ${Math.ceil(retry / 60)} minute${retry > 60 ? 's' : ''}. Your diary is unchanged; manual logging still works.`);
+    error.retryAfterSeconds = retry; return error;
+  }
   if (status === 504) return new RelayError(code, 'The AI service took too long. Please try again.');
   if (code === 'food_not_found') return new RelayError(code, 'No nutrition data was found for that barcode.');
   if (['groq_empty_response', 'groq_invalid_response', 'groq_invalid_plan', 'groq_incomplete_plan'].includes(code)) {
@@ -49,9 +56,16 @@ function headers(contentType = 'application/json'): Record<string, string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${RELAY_BASE_URL}${path}`, { ...init, headers: { ...headers(), ...(init.headers as Record<string, string> || {}) } });
-  if (!response.ok) throw friendlyError(response.status, await response.text());
-  return await response.json() as T;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), path.includes('/assistant/') ? 115_000 : path.includes('/foods/') ? 10_000 : 55_000);
+  try {
+    const response = await fetch(`${RELAY_BASE_URL}${path}`, { ...init, signal: controller.signal, headers: { ...headers(), ...(init.headers as Record<string, string> || {}) } });
+    if (!response.ok) throw friendlyError(response.status, await response.text());
+    return await response.json() as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw new RelayError('connection_timeout', 'The connection timed out. Nothing was changed; please try again.');
+    throw error;
+  } finally { clearTimeout(timeout); }
 }
 
 export interface SearchFoodResponse {
@@ -119,9 +133,13 @@ export async function transcribeRecording(uri: string): Promise<{ text: string; 
   if (!audio.exists || audio.size <= 0) throw new Error('The phone created an empty recording. Please record again.');
   const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'm4a';
   const mimeType = audio.type || (extension === 'webm' ? 'audio/webm' : extension === 'wav' ? 'audio/wav' : 'audio/mp4');
-  const response = await expoFetch(`${RELAY_BASE_URL}/v1/audio/transcribe`, { method: 'POST', headers: { ...headers(mimeType), 'x-audio-filename': `food-recording.${extension}` }, body: audio });
-  if (!response.ok) throw friendlyError(response.status, await response.text());
-  return await response.json() as { text: string; engine: string; retained: boolean };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await expoFetch(`${RELAY_BASE_URL}/v1/audio/transcribe`, { method: 'POST', signal: controller.signal, headers: { ...headers(mimeType), 'x-audio-filename': `food-recording.${extension}` }, body: audio });
+    if (!response.ok) throw friendlyError(response.status, await response.text());
+    return await response.json() as { text: string; engine: string; retained: boolean };
+  } finally { clearTimeout(timeout); }
 }
 
 export async function audioStatus(): Promise<{ configured: boolean; retention: string; provider?: string; mode?: string; model?: string }> {

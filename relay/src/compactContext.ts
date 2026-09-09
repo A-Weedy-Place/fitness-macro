@@ -1,6 +1,6 @@
+import { foodQueryTerms } from '../../mobile/src/logic/assistantExecution';
+import { validAssistantDate } from '../../mobile/src/logic/assistantActions';
 type JsonRecord = Record<string, unknown>;
-
-const STOP_WORDS = new Set(['a', 'an', 'and', 'at', 'ate', 'for', 'from', 'had', 'i', 'in', 'it', 'log', 'me', 'my', 'of', 'on', 'one', 'please', 'some', 'the', 'this', 'to', 'today', 'two', 'was', 'with']);
 
 function record(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
@@ -11,7 +11,7 @@ function records(value: unknown): JsonRecord[] {
 }
 
 function terms(value: string): string[] {
-  return [...new Set(value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter((term) => term.length > 1 && !STOP_WORDS.has(term)))];
+  return foodQueryTerms(value);
 }
 
 function searchable(value: unknown): string {
@@ -43,19 +43,29 @@ function trimToBudget(context: JsonRecord, maxChars: number): JsonRecord {
 
 export function compactAppContext(command: string, input: unknown): JsonRecord {
   const source = record(input) || {};
-  const queryTerms = terms(command);
-  const currentDate = typeof source.currentDate === 'string' ? source.currentDate : new Date().toISOString().slice(0, 10);
+  // History is inert conversation data, not privileged model instructions.
+  let remaining = 3_000;
+  const history = records(source.history).filter((item) => (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string').slice(-6).reverse()
+    .map((item) => { const text = String(item.text).slice(0, Math.min(900, remaining)); remaining -= text.length; return { role: item.role, text }; }).filter((item) => item.text).reverse();
+  const queryTerms = terms(`${command} ${history.slice(-2).map((item) => item.text).join(' ')}`);
+  const currentDate = validAssistantDate(source.currentDate) ? source.currentDate : new Date().toISOString().slice(0, 10);
+  const selectedDiaryDate = validAssistantDate(source.selectedDiaryDate) ? source.selectedDiaryDate : currentDate;
   const allEntries = records(source.entries);
-  const todayEntries = allEntries.filter((entry) => entry.date === currentDate).slice(-24);
-  const matchedEntries = ranked(allEntries.filter((entry) => entry.date !== currentDate), queryTerms, 8);
+  const todayEntries = allEntries.filter((entry) => entry.date === currentDate || entry.date === selectedDiaryDate).slice(-24).reverse();
+  const matchedEntries = ranked(allEntries, queryTerms, 12);
+  // Relevant named entries come first so character-budget trimming cannot remove
+  // the very item being edited before unrelated entries from the current day.
+  const entries = [...new Map([...matchedEntries, ...todayEntries].map((entry) => [entry.id, entry])).values()];
   const recipes = ranked(records(source.recipes), queryTerms, 12);
   const userFoods = ranked(records(source.userFoods), queryTerms, 20);
   const context: JsonRecord = {
     currentDate,
+    selectedDiaryDate,
     currentTime: source.currentTime,
+    history,
     profile: source.profile,
     goals: records(source.goals).slice(-2),
-    entries: [...todayEntries, ...matchedEntries],
+    entries,
     weights: records(source.weights).slice(-8),
     activities: records(source.activities).slice(-8),
     recipes,

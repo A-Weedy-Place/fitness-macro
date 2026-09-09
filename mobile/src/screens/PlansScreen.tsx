@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { AppState, MealPlan } from '../types';
@@ -19,7 +20,7 @@ export function PlansScreen({ state, date, onEditProfile, onCreate, onApply, onD
   const [name, setName] = useState('');
   const dayEntries = state.entries.filter((entry) => entry.date === date);
   const profile = state.profile;
-  const goal = goalForDate(state.goals, profile, date);
+  const goal = goalForDate(state.goals, profile, date, state.goalHistory);
   const tdee = profile ? profile.adaptiveTdee || estimateTdee(mifflinStJeor(profile), profile.activityFactor) : 0;
 
   function create() {
@@ -57,7 +58,7 @@ export function PlansScreen({ state, date, onEditProfile, onCreate, onApply, onD
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   direction: { color: colors.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   weight: { color: colors.ink, fontSize: 25, fontWeight: '900', marginTop: 5, marginBottom: 13 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
@@ -66,4 +67,4 @@ const styles = StyleSheet.create({
   explainer: { color: colors.muted, fontSize: 10.5, lineHeight: 16, marginBottom: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 13 },
   apply: { flex: 1 }
-});
+}));

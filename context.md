@@ -1,5 +1,25 @@
 # context.md
 
+## Current reliability and OTA checkpoint — 2026-09-09
+
+This section supersedes conflicting historical notes below. Tracking issue: [#29](https://github.com/A-Weedy-Place/fitness-macro/issues/29). The owner confirmed installed preview APK **v0.2.2** and requested the next fixes through **You → Updates**.
+
+- Keep GitHub private. EAS serves updates separately; the phone needs no GitHub credential. This JavaScript-only patch keeps native runtime `0.2.2`. Native dependency/plugin/permission/config changes later require a new runtime and APK. App-code and installed-native versions are displayed separately.
+- Every stage: issue → `codex/` branch → tested PR → CI → merge → Release Please version/changelog PR → tag. Publish the exact tag to **preview**, record the update group/runtime, then give a short test checklist. Do not publish to production or label an old APK as the new release. Compatible fixes can use OTA instead of another APK.
+- Schema **8** keeps nutrition snapshots on diary entries. Reusable recipe edits change future logs, not historical calories; changing a logged portion recalculates that entry. Date/time-only changes preserve its nutrition. Existing data is migrated, not deleted.
+- Local writes, imports, Health Connect reconciliation and chat/proposals are serialized and persisted before success. Independent concurrent changes rebase; conflicting changes fail visibly. AI Apply atomically saves mutations, consumes the proposal and adds its success reply. Chat survives restart; failed saves preserve drafts.
+- AI actions share relay/mobile domain validation and show executable ingredients, amounts, dates and targets before confirmation. Unit conversions preserve ml/g rather than treating them as cups. Repeated foods retain independent quantities. Date-only moves retain the clock time. Saved food nutrition remains authoritative; confidence is not an accuracy certificate.
+- New-dish enrichment optionally uses free Wikibooks ingredient references, capped at two total model calls including correction/refinement. Source revision/title/license are shown (CC-BY-SA4.0). This does not verify calories; macros remain ingredient estimates. No paid search API, general Google browsing or automatic overwrite of the owner's recipes is claimed.
+- Worker budgets are durable D1 counters per hour: reasoning60, transcription60, catalogue120, status600, telemetry240. Provider free limits are additional. Status/catalogue/telemetry do not consume the AI bucket. Apply `relay/migrations/0002_route_limits.sql` before Worker deployment. Error codes distinguish quota, timeout and provider faults with retry timing where available.
+- Health Connect reads all pages, uses timezone-aware intervals and aggregated energy, avoids duplicate overlapping workout energy, and reconciles corrections/deletions only after complete successful permission-covered reads. Manual weights win. Sync runs at app open/foreground/manual refresh, not continuously in the background; it can only read data other apps actually write.
+- Adaptive targets require at least14 consecutive confirmed-complete food days, four weigh-ins across the period, and an adequate interval. A partial food day is not automatically complete; diary edits reopen completion. Unfinished today is excluded. Goal history preserves earlier targets in trends; profile goal changes recompute weekly pace.
+- Themes now update live in place without reload/remount, preserving the Appearance panel. Warm Harvest is retained.
+- Portable JSON backup embeds supported photos, validates size/structure before restore and preserves recovery state. Selected photos move to persistent app storage. Restore rejects conflicting new diary changes. Native file selection uses the already-installed Expo module, not a new dependency.
+- Owner-authorized preview telemetry remains automatic/private, with serialized, UTF-8-byte-bounded queues and exact uploaded-ID acknowledgements. Queue/drop/upload status is visible. It is bounded diagnostics, not a promise of unlimited lossless offline capture. No audio/photos/PIN/API keys are collected. Public accounts/auth and removal of test collection remain pre-public-release requirements.
+- Security clarification: the Groq key stays only on the Worker. The separate preview relay token IS embedded through EAS and is extractable; it is not production account authentication. The Expo publishing token previously pasted into chat must be revoked/replaced before reuse; never paste secrets into chat.
+
+Final validation and tracked publication are pending; this checkpoint does not claim an update is already published. Release evidence will be added after delivery.
+
 ## Source of truth: standalone mobile product architecture - 2026-09-01
 
 This section supersedes older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual-mobile-key notes below. Older sections are historical implementation records only.
@@ -20,23 +40,23 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 - There is no PC hop, PC IP address, LAN pairing token, local background agent, Codex CLI, or desktop dependency in the target architecture.
 - The Groq key must never be embedded, encoded, obfuscated, or hashed inside the APK: a hash cannot call Groq, and any usable embedded secret can be extracted. Normal consumer apps solve this by keeping the key only on their backend.
-- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. Normal AI routes retain no diary, profile, recipe, or raw-audio data. Owner-authorized preview builds separately send sanitized test evidence to private D1; that test-only path must be removed before public release.
+- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` stays only on the Worker. The separate preview `APP_ACCESS_TOKEN` also exists in the APK through EAS; it is extractable, rotatable and not production account security. Normal AI routes retain no diary, profile, recipe, or raw-audio data. Owner-authorized preview builds separately send sanitized test evidence to private D1; that test-only path must be removed before public release.
 - Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists `openai/gpt-oss-120b` at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Official sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
-- The private Worker has a 60-request/hour per-warm-isolate cap. The app sends a maximum 6,000-character compact local context. Single-purpose GPT-OSS calls remain capped at 1,000 completion tokens; the strict multi-action planner may use up to 1,800 because its repeated schema fields otherwise caused omitted items. A fast burst can still hit Groq’s 8K TPM ceiling; local logging remains usable and the app tells the owner to retry later.
-- A preview APK contains a separate rotatable relay access token from EAS. It is not the Groq key, but it is extractable from an APK and therefore is only an owner-test safeguard. Proper account/device authentication and durable global rate limits are required before public distribution.
+- The private Worker uses independent durable D1 route budgets (see the current checkpoint). The app sends a maximum 6,000-character compact local context. Single-purpose GPT-OSS calls remain capped at 1,000 completion tokens; the strict multi-action planner may use up to 1,800 because its repeated schema fields otherwise caused omitted items. A fast burst can still hit Groq’s 8K TPM ceiling; local logging remains usable and the app tells the owner to retry later.
+- A preview APK contains a separate rotatable relay access token from EAS. It is not the Groq key, but it is extractable from an APK and therefore is only an owner-test safeguard. Proper account/device authentication is required before public distribution; private-test route limits now use D1.
 
 ### Delivery process required by the owner
 
 1. Work on one short, isolated stage only.
 2. Update this file and `obsidian/Fitness App Project Context.md` with the resulting decision and validation.
 3. Run proportionate tests, commit, and push to GitHub.
-4. Produce a new installable APK for that stage.
+4. Deliver via the tracked issue/PR/Release Please/tag workflow: a compatible preview OTA for JavaScript-only fixes, or a signed release-attached APK for native changes.
 5. Give the owner a short test checklist and wait for feedback before starting the next unrelated stage.
 
 ### Migration state
 
 - The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archival copy and is not used at runtime.
-- `mobile/src/services/agentClient.ts` now calls the Worker directly. Local state is schema **7** and has no remote-operation queue or last-synced timestamp.
+- `mobile/src/services/agentClient.ts` now calls the Worker directly. Local state is schema **8**, with no PC sync queue. Private diagnostics are a separate bounded queue.
 - `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
 
 ## Physical-phone AI and launch repair stage — 2026-09-05

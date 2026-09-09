@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FoodEntry, FoodItem } from '../types';
@@ -13,4 +14,4 @@ export function MealEntryRow({ entry, food, onDelete, onPress }: { entry: FoodEn
   </Pressable>;
 }
 
-const styles = StyleSheet.create({ row: { minHeight: 70, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.line }, emoji: { fontSize: 29, width: 42 }, photo: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.paperDeep, marginRight: 4 }, copy: { flex: 1, flexShrink: 1 }, name: { color: colors.ink, fontSize: 13, lineHeight: 17, fontWeight: '800' }, meta: { color: colors.muted, fontSize: 9, marginTop: 5 }, remove: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', marginLeft: 6 }, removeText: { color: colors.muted, fontSize: 18, lineHeight: 19 } });
+const styles = themedStyles(() => ({ row: { minHeight: 70, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.line }, emoji: { fontSize: 29, width: 42 }, photo: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.paperDeep, marginRight: 4 }, copy: { flex: 1, flexShrink: 1 }, name: { color: colors.ink, fontSize: 13, lineHeight: 17, fontWeight: '800' }, meta: { color: colors.muted, fontSize: 9, marginTop: 5 }, remove: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.paperDeep, alignItems: 'center', justifyContent: 'center', marginLeft: 6 }, removeText: { color: colors.muted, fontSize: 18, lineHeight: 19 } }));
