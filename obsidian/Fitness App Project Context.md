@@ -22,7 +22,9 @@ This section supersedes conflicting historical notes below. Tracking issue: [#29
 - Owner-authorized preview telemetry remains automatic/private, with serialized, UTF-8-byte-bounded queues and exact uploaded-ID acknowledgements. Queue/drop/upload status is visible. It is bounded diagnostics, not a promise of unlimited lossless offline capture. No audio/photos/PIN/API keys are collected. Public accounts/auth and removal of test collection remain pre-public-release requirements.
 - Security clarification: the Groq key stays only on the Worker. The separate preview relay token IS embedded through EAS and is extractable; it is not production account authentication. The Expo publishing token previously pasted into chat must be revoked/replaced before reuse; never paste secrets into chat.
 
-Final validation and tracked publication are pending; this checkpoint does not claim an update is already published. Release evidence will be added after delivery.
+The implementation is tracked by PR #30 and version/release PR #31 for v0.2.3 (native runtime0.2.2). Always check the [v0.2.3 GitHub Release](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.3) for actual publication status, update group and tag commit; a source version alone does not prove an update is available. A separately authenticated local Expo session can publish the tested tag without the exposed GitHub EXPO_TOKEN, with delivery evidence attached to that release. The old token still needs revocation/replacement.
+
+Live verification also found a real Groq400 `json_validate_failed` response: an otherwise usable action omitted a schema-required nullable field. This was not a token-limit or authentication failure. Only absent fields explicitly permitted to be null may be repaired; the complete result must still satisfy schema and domain validation. Never invent missing actions, food quantities or nutrition, and never log provider failed_generation or private prompt contents.
 
 ## Source of truth: standalone mobile product architecture - 2026-09-01
 

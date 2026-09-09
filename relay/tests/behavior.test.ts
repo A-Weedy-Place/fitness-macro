@@ -18,6 +18,9 @@ test('AM/PM spans are not reinterpreted as additional 24-hour times', () => {
   assert.deepEqual(requestedTimes('Log milk at 12:30 a.m. and tea at 9 am'), ['00:30', '09:00']);
   assert.deepEqual(requestedTimes('Log tea at 09:00 and Coke at 13:30'), ['09:00', '13:30']);
   assert.doesNotThrow(() => enforceAssistantPlan(proposal(), {}, 'Log milk at 1:30 pm'));
+  assert.throws(() => enforceAssistantPlan(proposal([{ ...action, time: null }]), {}, 'Log milk at 08:00'), /incomplete_plan/);
+  assert.throws(() => enforceAssistantPlan(proposal(), {}, 'Log milk at 08:00'), /incomplete_plan/);
+  assert.doesNotThrow(() => enforceAssistantPlan(proposal([{ ...action, type: 'change_entry_time', time: '08:00', targetId: 'milk_entry' }]), { entries: [{ id: 'milk_entry', foodName: 'Milk', date: '2026-09-09' }] }, 'Move milk from 13:30 to 08:00'));
   assert.throws(() => enforceAssistantPlan(proposal(), {}, 'Log tea at 09:00 and milk at 13:30'), /incomplete_plan/);
 });
 test('AI portions preserve ml and explicit mass for non-default units', () => {

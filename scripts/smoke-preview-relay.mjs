@@ -8,7 +8,7 @@ const base = process.env.EXPO_PUBLIC_RELAY_URL || 'https://fitness-macro-relay.f
 async function request(path, protocol, body) {
   const response = await fetch(`${base}${path}`, {
     method: body ? 'POST' : 'GET',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...(protocol ? { 'X-Weed-Fitness-Protocol': '2' } : {}) },
+    headers: { 'x-fitnessmacro-app-token': token.trim(), 'content-type': 'application/json', ...(protocol ? { 'X-Weed-Fitness-Protocol': '2' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(115_000)
   });
   const value = await response.json();
@@ -28,6 +28,8 @@ for (const protocol of [true, false]) {
   const plan = await request('/v1/assistant/plan', protocol, { command: 'Log 150 ml of Milk, low fat 2% at 08:00 today. Use my saved milk.', context });
   const action = plan.actions?.find(item => item.type === 'log_foods');
   assert.ok(action, 'Expected an executable food proposal.');
+  assert.equal(action.date, '2026-09-09', 'The proposed diary day must match the command.');
+  assert.equal(action.time, '08:00', 'The proposed clock time must match the command.');
   const item = action.ingredients?.find(item => /milk/i.test(item.name));
   assert.ok(item, 'Expected the saved milk.');
   const grams = protocol ? item.quantity * (item.unit === 'ml' || item.unit === 'g' ? 1 : item.gramsPerUnit) : item.quantity * 244;
