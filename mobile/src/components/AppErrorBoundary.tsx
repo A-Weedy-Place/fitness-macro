@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 
@@ -46,7 +47,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   root: { flex: 1, backgroundColor: '#F7F1E7' },
   content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   mark: { width: 34, height: 6, borderRadius: 3, backgroundColor: '#E66B50', marginBottom: 18 },
@@ -57,4 +58,4 @@ const styles = StyleSheet.create({
   code: { color: '#1D2C25', fontSize: 11, lineHeight: 17 },
   button: { minHeight: 46, borderRadius: 14, backgroundColor: '#173F2D', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   buttonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' }
-});
+}));

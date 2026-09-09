@@ -1,19 +1,39 @@
 ---
 tags: [fitness-app, macronutrients, local-first, roadmap]
 project: fitness-macro
-updated: 2026-09-05
+updated: 2026-09-09
 ---
+
+## Current reliability and OTA checkpoint — 2026-09-09
+
+This section supersedes conflicting historical notes below. Tracking issue: [#29](https://github.com/A-Weedy-Place/fitness-macro/issues/29). The owner confirmed installed preview APK **v0.2.2** and requested the next fixes through **You → Updates**.
+
+- Keep GitHub private. EAS serves updates separately; the phone needs no GitHub credential. This JavaScript-only patch keeps native runtime `0.2.2`. Native dependency/plugin/permission/config changes later require a new runtime and APK. App-code and installed-native versions are displayed separately.
+- Every stage: issue → `codex/` branch → tested PR → CI → merge → Release Please version/changelog PR → tag. Publish the exact tag to **preview**, record the update group/runtime, then give a short test checklist. Do not publish to production or label an old APK as the new release. Compatible fixes can use OTA instead of another APK.
+- Schema **8** keeps nutrition snapshots on diary entries. Reusable recipe edits change future logs, not historical calories; changing a logged portion recalculates that entry. Date/time-only changes preserve its nutrition. Existing data is migrated, not deleted.
+- Local writes, imports, Health Connect reconciliation and chat/proposals are serialized and persisted before success. Independent concurrent changes rebase; conflicting changes fail visibly. AI Apply atomically saves mutations, consumes the proposal and adds its success reply. Chat survives restart; failed saves preserve drafts.
+- AI actions share relay/mobile domain validation and show executable ingredients, amounts, dates and targets before confirmation. Unit conversions preserve ml/g rather than treating them as cups. Repeated foods retain independent quantities. Date-only moves retain the clock time. Saved food nutrition remains authoritative; confidence is not an accuracy certificate.
+- New-dish enrichment optionally uses free Wikibooks ingredient references, capped at two total model calls including correction/refinement. Source revision/title/license are shown (CC-BY-SA4.0). This does not verify calories; macros remain ingredient estimates. No paid search API, general Google browsing or automatic overwrite of the owner's recipes is claimed.
+- Worker budgets are durable D1 counters per hour: reasoning60, transcription60, catalogue120, status600, telemetry240. Provider free limits are additional. Status/catalogue/telemetry do not consume the AI bucket. Apply `relay/migrations/0002_route_limits.sql` before Worker deployment. Error codes distinguish quota, timeout and provider faults with retry timing where available.
+- Health Connect reads all pages, uses timezone-aware intervals and aggregated energy, avoids duplicate overlapping workout energy, and reconciles corrections/deletions only after complete successful permission-covered reads. Manual weights win. Sync runs at app open/foreground/manual refresh, not continuously in the background; it can only read data other apps actually write.
+- Adaptive targets require at least14 consecutive confirmed-complete food days, four weigh-ins across the period, and an adequate interval. A partial food day is not automatically complete; diary edits reopen completion. Unfinished today is excluded. Goal history preserves earlier targets in trends; profile goal changes recompute weekly pace.
+- Themes now update live in place without reload/remount, preserving the Appearance panel. Warm Harvest is retained.
+- Portable JSON backup embeds supported photos, validates size/structure before restore and preserves recovery state. Selected photos move to persistent app storage. Restore rejects conflicting new diary changes. Native file selection uses the already-installed Expo module, not a new dependency.
+- Owner-authorized preview telemetry remains automatic/private, with serialized, UTF-8-byte-bounded queues and exact uploaded-ID acknowledgements. Queue/drop/upload status is visible. It is bounded diagnostics, not a promise of unlimited lossless offline capture. No audio/photos/PIN/API keys are collected. Public accounts/auth and removal of test collection remain pre-public-release requirements.
+- Security clarification: the Groq key stays only on the Worker. The separate preview relay token IS embedded through EAS and is extractable; it is not production account authentication. The Expo publishing token previously pasted into chat must be revoked/replaced before reuse; never paste secrets into chat.
+
+Final validation and tracked publication are pending; this checkpoint does not claim an update is already published. Release evidence will be added after delivery.
 
 ## Source of truth: standalone mobile product architecture - 2026-09-01
 
-> This section supersedes the older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual mobile-key notes below. Those sections are historical records, not the forward plan.
+This section supersedes older PC-agent, LAN-pairing, Codex CLI, local-Whisper, and manual-mobile-key notes below. Older sections are historical implementation records only.
 
 ### Product definition
 
-- **Weed Fitness is a standalone Android nutrition app.** The APK owns diary, cookbook, recipes, targets, plans, trends, profile, local lock, and portable backup. Core features must not need a PC. `FitnessMacro` remains only in internal identifiers retained to preserve existing app data and build updates.
-- The app has internet. AI features are online, but normal local features remain usable offline.
-- Do not package Whisper, an LLM, Codex CLI, or any large model on the phone. Do not ask the user to enter an AI API key.
-- Use Groq `whisper-large-v3-turbo` for STT and `openai/gpt-oss-120b` for confirmation-gated food-agent plans. The mobile app sends compact relevant local context and applies approved actions to its own database.
+- **Weed Fitness is a standalone Android nutrition app.** The installed APK owns the user's diary, cookbook, recipes, targets, plans, trends, profile, local app lock, and portable backup. These normal features must work without a PC. `FitnessMacro` remains only in internal identifiers retained to preserve existing app data and build updates.
+- The app has internet access. AI features are online by design; the app must remain useful if the internet is unavailable.
+- The user does **not** want Whisper, an LLM, Codex CLI, or another large model packaged on the phone. The app must not ask the user to paste an AI API key.
+- The product uses two Groq-hosted models: `whisper-large-v3-turbo` for speech-to-text and `openai/gpt-oss-120b` for typed food-agent reasoning. The agent reads compact relevant local context, returns confirmation-gated actions, and the mobile app itself applies approved changes to its local database.
 
 ### Required production connection
 
@@ -22,25 +42,25 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
                                       └→ server-side GROQ_API_KEY secret
 ```
 
-- No PC hop, LAN pairing, desktop process, PC IP, Codex CLI, or desktop dependency in the target product.
-- Never embed, obfuscate, or hash a usable Groq key into the APK. A hash cannot call Groq; a bundled secret can be extracted. The private relay keeps the key server-side, as normal consumer apps do.
-- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` and `APP_ACCESS_TOKEN` are encrypted Worker secrets; neither is in Git or the APK. Normal AI routes retain no diary, profile, recipe, or raw-audio data. Owner-authorized preview builds separately send sanitized test evidence to private D1; that test-only path must be removed before public release.
-- Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists GPT-OSS 120B at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
-- The Worker accepts at most 60 app requests/hour per warm isolate and compacts local context to 6,000 characters. Single-purpose GPT-OSS calls remain capped at 1,000 completion tokens; the strict multi-action planner may use 1,800 because its repeated schema fields otherwise caused omitted items. Rapid bursts can still reach Groq's 8K TPM free limit.
-- The preview APK has a separate rotatable relay access token. It is not the Groq key, but it is extractable from an APK and is only an owner-test safeguard. Proper account/device authentication and durable global rate limits are required before public distribution.
+- There is no PC hop, PC IP address, LAN pairing token, local background agent, Codex CLI, or desktop dependency in the target architecture.
+- The Groq key must never be embedded, encoded, obfuscated, or hashed inside the APK: a hash cannot call Groq, and any usable embedded secret can be extracted. Normal consumer apps solve this by keeping the key only on their backend.
+- The no-cost Cloudflare Worker is deployed at `https://fitness-macro-relay.fitness-macro-relay.workers.dev`. `GROQ_API_KEY` stays only on the Worker. The separate preview `APP_ACCESS_TOKEN` also exists in the APK through EAS; it is extractable, rotatable and not production account security. Normal AI routes retain no diary, profile, recipe, or raw-audio data. Owner-authorized preview builds separately send sanitized test evidence to private D1; that test-only path must be removed before public release.
+- Cloudflare Workers Free currently allows 100,000 requests/day with 10 ms CPU per request. Groq Free currently lists `openai/gpt-oss-120b` at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; Whisper Turbo is listed at 20 RPM, 2,000 RPD, 7,200 audio seconds/hour, and 28,800 seconds/day. Official sources: [Cloudflare pricing](https://developers.cloudflare.com/workers/platform/pricing/), [Cloudflare secrets](https://developers.cloudflare.com/workers/configuration/secrets/), and [Groq rate limits](https://console.groq.com/docs/rate-limits).
+- The private Worker uses independent durable D1 route budgets (see the current checkpoint). The app sends a maximum 6,000-character compact local context. Single-purpose GPT-OSS calls remain capped at 1,000 completion tokens; the strict multi-action planner may use up to 1,800 because its repeated schema fields otherwise caused omitted items. A fast burst can still hit Groq’s 8K TPM ceiling; local logging remains usable and the app tells the owner to retry later.
+- A preview APK contains a separate rotatable relay access token from EAS. It is not the Groq key, but it is extractable from an APK and therefore is only an owner-test safeguard. Proper account/device authentication is required before public distribution; private-test route limits now use D1.
 
-### Required delivery rhythm
+### Delivery process required by the owner
 
-1. One short isolated change stage.
-2. Update this note and `context.md`.
-3. Test, commit, and push.
-4. Build an installable APK.
-5. Owner tests with a short checklist before the next unrelated change.
+1. Work on one short, isolated stage only.
+2. Update this file and `obsidian/Fitness App Project Context.md` with the resulting decision and validation.
+3. Run proportionate tests, commit, and push to GitHub.
+4. Deliver via the tracked issue/PR/Release Please/tag workflow: a compatible preview OTA for JavaScript-only fixes, or a signed release-attached APK for native changes.
+5. Give the owner a short test checklist and wait for feedback before starting the next unrelated stage.
 
 ### Migration state
 
-- The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archive and is not used at runtime.
-- `mobile/src/services/agentClient.ts` now calls the Worker directly. Mobile state is schema **7** with no remote sync queue.
+- The old Express `agent/` source, PC sync queue, LAN pairing/token settings, PC link form, Codex CLI route, local Whisper/Python service, provider switching, and PC Strava OAuth path are removed. Former agent data remains ignored only as a local archival copy and is not used at runtime.
+- `mobile/src/services/agentClient.ts` now calls the Worker directly. Local state is schema **8**, with no PC sync queue. Private diagnostics are a separate bounded queue.
 - `relay/` is the only server-side runtime and is source-controlled without secrets. It provides goal programs, typed action plans, food phrase resolution, Whisper transcription, Open Food Facts search, and barcode lookup.
 
 ## Physical-phone AI and launch repair stage — 2026-09-05
@@ -65,13 +85,13 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 ## Food correctness and editable cookbook stage — 2026-09-01
 
-- A named prepared drink/dish is one diary food, not separate ingredient rows. Cold milk coffee, milk coffee, iced coffee, lassi, shakes, and comparable composite drinks now force `create_recipe_and_log`; component foods belong inside the recipe only.
-- Diary edits use visible names naturally. The relay receives stable IDs plus food names and now resolves harmless differences such as `coffee black` / `Coffee, black` to the correct entry before confirmation. Genuine ambiguity still asks a clarification.
-- Nutrition calculation honours each diary entry's selected unit. Changing milk from 1 cup to 150 ml calculates 150 ml, not 150 cups.
-- The Food book control opens separate personal recipes, AI recipes, and custom foods. Food editing covers name/brand/macros/emoji/gallery photo; recipe editing covers ingredients, quantities, servings, name, emoji, and gallery photo. Logged dates and amounts are preserved; their calculations use the corrected reusable food/recipe values.
-- Recent-food plus controls no longer cover a food name or image. Food/recipe photos render in the library, detail sheet, and diary.
-- Themes use a safe static-style reload for complete palette changes. A stored return marker puts the owner back in **You → Appearance & display**, never Today, after selecting a theme. A future dynamic-token refactor can remove the short reload.
-- Stage validation: mobile and relay TypeScript pass; 14 mobile core tests include the cup-to-ml regression. A new APK is required for the expanded native gallery permission wording.
+- A named prepared drink or dish is one diary food, not a set of separate diary rows. The relay now explicitly treats cold milk coffee, milk coffee, iced coffee, lassi, shakes, and comparable composite drinks as `create_recipe_and_log`: individual ingredients are saved inside the recipe only.
+- Food/time edits no longer depend on the owner knowing database IDs. The app shares actual visible food names and IDs with the relay; the relay now resolves harmless wording differences such as `coffee black` versus `Coffee, black` to the exact diary entry before the owner confirms the change. It preserves ambiguity as a clarification rather than guessing.
+- Diary nutrition now honours the unit saved on each entry. Editing 1 cup of milk to 150 ml calculates 150 ml (about 75 kcal for 2% milk), never 150 cups.
+- **Food** now has a book control for an explicit cookbook view: personal recipes, AI-created recipes, and custom foods are separate. Opening a food gives an edit action; a recipe editor updates ingredients, portions, servings, recipe name, emoji, and a gallery photo. A food editor updates custom-food name/brand/macros, emoji, and a gallery photo. Logged dates and amounts are preserved; calculations use the corrected reusable food/recipe values.
+- Recent-food plus buttons are no longer positioned over food text or a food image. Chosen food/recipe photos render in the library, detail sheet, and diary row.
+- Themes remain static-style based at this point, so changing a palette performs a controlled in-app reload to apply every static surface. A one-time marker restores **You → Appearance & display** after the reload rather than returning the owner to Today. A future dynamic-token refactor can remove this brief reload, but it is not required for correct theme application.
+- Validation in this stage: mobile TypeScript and relay TypeScript pass; the mobile core suite now has 14 tests, including the cup-to-ml regression test. The new native gallery permission wording requires a replacement APK.
 
 ## Test telemetry and release-process correction — 2026-09-04
 
@@ -94,88 +114,95 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 ### v0.2.1 recovery artifact
 
-- Issue [#19](https://github.com/A-Weedy-Place/fitness-macro/issues/19) and PR [#20](https://github.com/A-Weedy-Place/fitness-macro/pull/20) produced release [`v0.2.1`](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.1). GitHub Actions run [`33863227996`](https://github.com/A-Weedy-Place/fitness-macro/actions/runs/33863227996) passed every gate and attached [`Weed-Fitness-v0.2.1-preview.apk`](https://github.com/A-Weedy-Place/fitness-macro/releases/download/v0.2.1/Weed-Fitness-v0.2.1-preview.apk), size `112,294,352` bytes, SHA-256 `23be5a2922d0340710a393d16082ecf7dacdd4a630f1eaa56c1a3e2a6c7d99b7`.
-- EAS build `31b3936d-1b06-43ec-bbde-8ff3e2faddaf` compiled tagged commit `2e95373` as Android `versionCode` **3**. Install it over v0.2.0 without uninstalling so Android preserves the existing local database.
-- v0.2.0 is a known crashing phone build and is superseded. The exact original native cause remains unproven without Android logs; v0.2.1 remains a recovery candidate until the owner confirms that the same phone reaches **Today**. A `WF-RENDER` code or the last visible launch screen must be captured if it still fails, after which the new early telemetry breadcrumbs can be inspected.
+- GitHub issue [#19](https://github.com/A-Weedy-Place/fitness-macro/issues/19) and PR [#20](https://github.com/A-Weedy-Place/fitness-macro/pull/20) produced release [`v0.2.1`](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.1). GitHub Actions run [`33863227996`](https://github.com/A-Weedy-Place/fitness-macro/actions/runs/33863227996) passed every gate and attached [`Weed-Fitness-v0.2.1-preview.apk`](https://github.com/A-Weedy-Place/fitness-macro/releases/download/v0.2.1/Weed-Fitness-v0.2.1-preview.apk), size `112,294,352` bytes, SHA-256 `23be5a2922d0340710a393d16082ecf7dacdd4a630f1eaa56c1a3e2a6c7d99b7`.
+- EAS build `31b3936d-1b06-43ec-bbde-8ff3e2faddaf` compiled tagged commit `2e95373` as Android `versionCode` **3**. Install v0.2.1 directly over v0.2.0 so Android preserves the existing local app database; do not uninstall first unless the owner deliberately accepts losing local data.
+- v0.2.0 is a known crashing physical-phone build and is superseded by v0.2.1. The exact original native cause remains unproven without Android crash logs, and v0.2.1 is a recovery candidate rather than a confirmed fix until the owner verifies on the same phone that it reaches **Today**. If it shows `WF-RENDER`, capture the displayed code; if Android still terminates, report which launch screen was last visible and inspect the new early telemetry breadcrumbs.
 
 ## Startup and private AI diagnostics stage — 2026-09-04
 
-- Native startup shows the Weed Fitness logo. Once JavaScript loads, a warm launch screen replaces the temporary empty root with a local-data message; it does not contact a server. The original native-driver rotating leaf was removed from v0.2.1's critical startup path while the phone crash is investigated.
-- The device keeps the last 120 assistant, quick-log, and voice diagnostic events locally: commands/transcripts where available, assistant replies, proposed actions, actual apply counts, and errors. It excludes API keys, raw audio, and the complete app snapshot.
-- **You → Backup & restore → Share AI diagnostics** opens an explicit JSON share sheet. The owner can share it with screenshots for evidence-based debugging; nothing is automatically uploaded and Codex cannot see phone data without that deliberate share.
-- An approved assistant plan that makes no real mutation/no navigation now says that nothing changed instead of falsely reporting success. A detailed mutation request that receives an empty plan gets an explicit no-action result. Relay instructions also require a confirmation plan for sufficiently detailed mutations.
-- Google/email login stays out of this stage. It needs a deliberately designed authentication, recovery, cloud-sync, consent, and privacy system, rather than being added solely to access diagnostics.
-- Validation: mobile TypeScript and 14 core tests pass; relay TypeScript passes. Preview APK build `b4dd56e2-3855-4b3f-83cd-36a1532e8a0b` completed on 2026-09-04 from commit `1034328` (version 0.1.0, Android build 2); its direct install link was shared with the owner.
+- Startup no longer shows the empty temporary root while local diary and lock state load. Native splash configuration uses the Weed Fitness logo, followed by an in-app warm launch screen and short local-data message. The original native-driver rotating leaf was removed from v0.2.1's critical startup path while the physical-phone crash is investigated. Startup sends no request and reads no remote account.
+- AI reliability is now observable: the device records the last 120 assistant, quick-log, and voice events locally. Each event contains the command/transcript when available, reply, proposed action metadata, successful apply count, or error. It intentionally excludes API keys, raw audio, and the full app snapshot.
+- **You → Backup & restore → Share AI diagnostics** creates a deliberate JSON share sheet. The owner can paste or attach that export alongside screenshots; Codex can then diagnose a failed/no-op request from evidence rather than inference. Nothing is uploaded automatically and Codex cannot remotely access the phone’s local data.
+- Fixed a misleading action result: if an approved assistant plan produces no real mutation and no navigation, the app now says that nothing changed and retains the plan instead of falsely reporting success. A direct mutation command that returns an empty plan gets an explicit no-action message. The relay prompt also requires a confirmation-gated action whenever a sufficiently detailed mutation is requested.
+- Current account policy remains intentionally local/device-only. A Google/email account would require a separately designed authenticated backend, consent/privacy policy, recovery, and cloud synchronization; it is not silently introduced merely to collect diagnostics.
+- Validation: mobile TypeScript and all 14 core tests pass; relay TypeScript passes. Preview APK build `b4dd56e2-3855-4b3f-83cd-36a1532e8a0b` completed on 2026-09-04 from commit `1034328` (version 0.1.0, Android build 2); its direct install link was shared with the owner.
 
 ### Standalone relay validation — 2026-08-31
 
-- **You → Connections** shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains optional and free; Strava is a later secure-hosted stage.
-- Android clear-text traffic is disabled because AI/reference traffic uses HTTPS. The Worker gives the app a 60-request/hour per-warm-isolate cap, a 6,000-character local context ceiling, and a 1,000-token GPT-OSS response cap.
-- Validation: relay TypeScript, mobile TypeScript, and 12 local tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call hit Groq’s expected free-tier `429`; normal personal use should avoid rapid bursts.
+- **You → Connections** now shows hosted Voice assistant/Food agent status with no PC-link form, Wi-Fi address, pairing token, or user API-key entry. Health Connect remains an optional free Android-native integration; Strava is deliberately a later secure-hosted stage.
+- Android clear-text traffic is disabled because AI/reference requests use HTTPS.
+- Validation: Worker TypeScript passes; mobile TypeScript and 12 mobile tests pass. Live Worker goal-program and typed-action calls succeeded. A third immediate structured call received Groq’s expected free-tier `429`, confirming that this personal free tier should not be burst-tested.
 
 ## APK feedback correction stage — 2026-08-31
 
-- Physical-phone testing confirmed that the direct Groq relay is live, but also exposed product issues that Expo Go did not prove. This stage fixes those behaviors before the next preview APK.
-- **Calendar/clock:** default diary dates follow the phone clock instead of UTC. **You → Date & time** stores either Device time or a valid IANA override (including `Asia/Karachi`). Today always shows Monday–Sunday; arrows move by a whole week.
-- **Manual food control:** catalogue failure cannot block local cookbook/reference search. Tap a logged diary item to edit only that item’s amount, unit, note, date, or time. Custom food and dish builder remain available without AI.
-- **Adaptive plan:** after 14 calendar dates, 10 food-log days, and weights across the interval, observed maintenance may update no more than weekly, at ≤100 kcal/day per step. Missing data never lowers targets. Method details are collapsible.
-- **Account panels:** account Goal plan and Progress panels no longer jump to the main tab bar. Themes use production-safe `expo-updates` restart. Health Connect now declares its three read permissions, reads all allowed Health Connect origins, and shows an explicit result dialog.
-- The stale ignored mobile `.env` containing an old PC URL/pairing token was deleted. There is no mobile PC runtime path.
-- Validation: `npm run typecheck`, **13/13** mobile tests (including local-calendar/Monday-week coverage), Android config permission inspection, SDK-compatible `expo-updates`, and `git diff --check` pass. Canonical preview build `2748e908-771b-4f73-aad9-1e3145942d29` from `41bfd42` finished successfully: `https://expo.dev/artifacts/eas/-dvLRhIbi5kZhkZ6dfmIysGT9MJq-RO7JDu2EVf8jJs.apk` (expires 2026-09-14). Its accidental duplicate has the same artifact fingerprint.
+- The owner tested the first standalone APK on a physical phone. The direct Groq relay is working (typed AI responds), but the release exposed several real product issues; this stage corrects the behavior rather than treating Expo Go as final proof.
+- **Calendar and clock:** diary dates now default to the phone’s local calendar instead of UTC; a selectable IANA time-zone override lives in **You → Date & time**. Today shows one full Monday–Sunday week, and its arrows move by whole weeks.
+- **Manual-first food logging:** a successful or failed online catalogue lookup never blocks the on-device cookbook/reference search. Every logged row now opens an individual editor for its amount, unit, note, date, and time; editing a log never changes the reusable food/recipe. The manual Custom food and Build a dish paths are visible beside search.
+- **Adaptive goals:** after 14 calendar days, at least 10 logged food days, and weigh-ins across the period, a local observed-maintenance estimate can update automatically at most once a week, with a maximum 100 kcal/day step. Missing logs never lower a target. The detailed calculation is collapsible; the normal Goals view is concise.
+- **Account separation:** Goals & daily plan and Progress & statistics in **You** are account panels, not shortcuts into bottom-tab screens. The main Goals and Trends tabs remain separate product views.
+- **Themes:** release builds use `expo-updates` to restart safely after a palette selection; the former development-only reload path was the reason appearance choices appeared to do nothing in the APK.
+- **Health Connect:** the Android manifest now declares only `READ_WEIGHT`, `READ_ACTIVE_CALORIES_BURNED`, and `READ_TOTAL_CALORIES_BURNED`; the app requests them at runtime, no longer filters records to Strava, and shows the connection result in a dialog. It still requires Android Health Connect support and a device screen lock. It is free and never uses an API key.
+- Deleted the obsolete ignored mobile `.env` that contained a previous PC address/pairing token. No mobile runtime reads any PC URL or pairing variable.
+- Validation before the replacement preview build: `npm run typecheck` passes, **13/13** mobile tests pass (including local-calendar and Monday-week coverage), `expo config` resolves the three Health Connect permissions, `expo-updates` is installed at the Expo SDK-compatible version, and `git diff --check` passes. Canonical preview build `2748e908-771b-4f73-aad9-1e3145942d29` from commit `41bfd42` finished successfully: `https://expo.dev/artifacts/eas/-dvLRhIbi5kZhkZ6dfmIysGT9MJq-RO7JDu2EVf8jJs.apk` (expires 2026-09-14). A duplicate job produced the same artifact fingerprint and can be ignored.
 
 ## Voice and confirmation correction stage — 2026-08-31
 
-- Voice capture is now a compact microphone button beside the text input on the Assistant, quick food log, and Food library screens. Tap to start, tap again to stop; it only converts speech to editable text.
-- A transcript does **not** send itself to the AI, resolve food, or write any diary data. The owner chooses the next action by tapping **Send**, **Search**, or **Ask AI** after reviewing/editing the text.
-- AI changes are clearly marked as not yet applied. The owner must tap **Apply**. Diary-affecting assistant actions then show **Today** at the exact date that changed, making a successful food/time/delete action directly verifiable.
-- This remains APK → private HTTPS relay → Groq Whisper/GPT-OSS with no PC connection and no retained raw audio. Mobile type checking passed before the replacement APK build.
+- **Voice is transcription only.** Every capture surface now uses one compact microphone button directly beside the editable text field. Tap once to record and again to stop; Whisper returns text to that field. Recording never sends a prompt, calls the food agent, or changes the diary by itself.
+- The owner may edit the returned transcript, then deliberately choose **Search**, **Ask AI**, or **Send**. This keeps manual food lookup fully usable and prevents a speech capture from creating a chain of unexpected replies.
+- AI plans state that they have not changed anything yet and use an explicit **Apply** action rather than ambiguous confirmation wording. A confirmed action that creates, changes, or removes a diary entry opens **Today** at the exact affected date, so the result is immediately visible. A quick-log AI plan follows the same apply-only rule.
+- `mobile/src/components/VoiceRecorder.tsx` is now only an audio capture/transcription control. The remote request still travels APK → private HTTPS relay → Groq; no PC is involved and raw audio is not retained.
+- Validation for this stage: mobile `npm run typecheck` passed. The next preview APK must test compact voice capture, editable transcript, deliberate AI apply, and diary navigation after an AI log.
 
 ## Account and Android UI checkpoint - 2026-08-31
 
-- Keep this note and `context.md` synchronized after every material product decision or completed feature.
-- Android navigation must start hidden so it cannot overlay the in-app bottom tabs; the normal bottom-edge swipe is the intentional way to reveal it temporarily.
-- Bottom navigation is now icon-led (Today, Goals, AI, Trends, Food, You) with compact text labels retained for clarity/accessibility.
-- **You** is a compact account hub with separate Profile & measurements, Goals & daily plan, Progress & statistics, Appearance & display, Connections, Local app lock, and Backup/restore/sync panels rather than one long form.
-- A chosen profile image is saved as a local device URI. It is not yet a cloud avatar and may need reselecting after moving devices.
-- Current login scope is deliberately local and free: an optional 4–8 digit PIN in encrypted Expo SecureStore locks the app after backgrounding. It has no cloud identity, email/Google sign-in, recovery, or cross-device behavior. A real account requires a future authenticated backend.
-- Themes: Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. The app follows device brightness rather than changing it.
-- New Expo native dependencies/config cover system navigation-bar hiding, local photo selection, and encrypted PIN storage. Rebuild the APK to test native behavior realistically; Expo Go remains useful for UI iteration.
+- Keep this section synchronized with `obsidian/Fitness App Project Context.md` whenever the user makes a material product decision or a feature is completed.
+- Android's system navigation bar must start hidden so it cannot cover FitnessMacro's fixed bottom tab bar. Android's normal bottom-edge swipe remains the deliberate way to reveal it temporarily.
+- The app now uses icon-led bottom navigation: Today, Goals, AI, Trends, Food, and You. Text labels remain below the icons for clarity and accessibility.
+- **You** is now a compact account hub rather than a long single form. Its panels separate Profile & measurements, Goals & daily plan, Progress & statistics, Appearance & display, Connections, Local app lock, and Backup/restore/sync.
+- A profile picture can be picked from the phone's library and is stored as a local URI in the local-first profile record. It is useful on the current device; it is not yet a cloud-synced avatar and may need selecting again after moving to a new phone.
+- Optional login for the current local-first product is a device-only 4–8 digit PIN, stored in encrypted Expo SecureStore. It locks on backgrounding and has no subscription, server, email identity, password recovery, or cross-device account semantics. A real email/Google account must be designed with an authenticated backend later; do not imply that this PIN is one.
+- Appearance now offers Warm Harvest, Clean Neutral, Charcoal, Coastal Blue, and Orchid Dusk. Brightness intentionally follows the phone's own system controls.
+- Added native Expo dependencies/config for Android navigation-bar control, profile photo picking, and encrypted local PIN storage. These native additions need a rebuilt APK for full realistic testing, though most layout work can still be inspected in Expo Go.
 - There is no PC link, saved Wi-Fi address, pairing token, or desktop agent in the shipped mobile path. The preview APK reaches only the private HTTPS relay.
-- Verification: mobile type-check + 12 tests and agent build + 8 tests pass.
+- Validation after this UI checkpoint: mobile TypeScript check + 12 tests pass; agent build + 8 tests pass.
 
 ## Phone-test product specification checkpoint - 2026-08-30
 
-- Keep this note and `context.md` synchronized after material product decisions and completed work.
-- Profile/onboarding data must drive a personalized nutrition program. Health Connect is a free Android data bridge for weight/activity records, while deterministic bounded calculations own target numbers and Groq personalizes/explains meals and operates typed actions.
-- The assistant must control food logging at explicit times, time corrections, deletion, recipe creation/editing/reuse, separate one-off modifiers such as extra oil, daily weight, and later exercise/Strava.
-- Library UX must separate recently eaten foods, the user's personal cookbook, and a broader reference catalog, with strong Pakistani, Indian, South Asian, and Southeast Asian coverage.
-- Resolution order is reviewed saved recipe, trustworthy reference evidence, then conservative confirmation-gated Groq ingredient decomposition. Reviewed recipes are reused without repeated research; model estimates never silently overwrite cookbook nutrition.
-- Store at most one canonical weight record per local calendar day; a second value updates that day.
-- Prefer installable APK builds for realistic performance and native Health Connect tests; retain Expo Go for quick iteration.
+- Keep this file and `obsidian/Fitness App Project Context.md` updated after material product decisions and completed work so future sessions inherit the real state.
+- Onboarding/profile information must drive a personalized nutrition program. Health Connect may contribute free Android weight/activity records, but planning numbers must remain deterministic and evidence-based; Groq may personalize meals, explain the plan, and operate typed actions without silently rewriting safety-bounded targets.
+- The assistant is intended to control the complete food workflow: log food at an explicit time/date, correct entry time, delete entries, create/edit cookbook recipes, reuse saved recipes, log one-off modifiers separately, log weight, and later incorporate exercise/Strava.
+- Cookbook/library UX should distinguish recently eaten foods, the user's personal recipes, and a broader reference catalog. Regional coverage must prioritize Pakistani, Indian, South Asian, and Southeast Asian dish names and ingredients.
+- Food resolution order: relevant saved/AI-reviewed recipe first; otherwise trustworthy reference/catalog evidence; otherwise a conservative Groq-proposed ingredient recipe that requires confirmation. A one-off modifier such as extra oil must be a separate diary item and must not mutate the base recipe.
+- A newly researched recipe stores decomposed ingredients and normalized macros plus provenance/review status. Once a recipe is reviewed, ordinary reuse should not repeat external research. Existing cookbook nutrition must never be overwritten merely because a model estimate differs; updates require an explicit reviewed action and confirmation.
+- Weight logging is one canonical record per local calendar day; another same-day log updates/replaces that record rather than creating duplicates.
+- Expo Go remains useful for quick UI iteration, but installable Android APK builds are preferred for realistic performance and native Health Connect testing.
 
 ### Implemented from this checkpoint
 
-- Mobile state is now schema **6** (migration from 5). It saves the personalized nutrition program and keeps only the latest weight record for every calendar day. The PC agent remains schema 5 but applies the same daily-weight rule.
-- Onboarding captures eating style, preferred food familiarity (Pakistani/Indian/South Asian/Southeast Asian), meals per day, and optional foods to avoid. Groq returns a flexible meal structure, while local Mifflin-St Jeor/TDEE calculations remain the locked source of calorie and macro targets.
-- Goals persist the sample day, per-meal target allocations, actions/cautions, and WHO, ICMR-NIN 2024, and Dietary Guidelines source links. The local plan remains available if Groq is unavailable.
-- Health Connect is free, permission-scoped Android import for daily weight and Strava calories. A manual in-app check-in wins for the same day. Native Health Connect requires the custom APK/development build, not Expo Go.
-- The Food tab now shows true Recent foods, My cookbook, and Reference catalog separately; recipes show Personal recipe vs AI estimate provenance. An AI estimate never overwrites saved cookbook nutrition.
-- `docs/food-data-strategy.md` documents free/attributed sources: local/USDA first, IFCT 2017 planned for South Asian ingredients, and RecipeDB excluded for its non-commercial licence.
-- `mobile/eas.json` defines EAS development and installable preview APK profiles. Android LAN HTTP is enabled intentionally for the paired PC agent.
-- Expo project linked as `@a-weedy-place/fitness-macro` (project ID `714cf37d-459a-4408-b025-1334f0bfc779`). Preview APK build `19f9ec60-9684-4a18-b68d-d589b5768dd0` was submitted on 2026-08-30 and was still `IN_PROGRESS` at the last check; use the EAS build list command in `mobile/` to retrieve its artifact when complete.
-- Live agent test produced a Pakistani three-meal structure while holding the local target at 2,147 kcal / 148 g protein. Mobile type-check + 12 tests and agent build + 8 tests pass.
+- Mobile state migrated safely from schema 5 to **schema 6**. It persists the personalized nutrition program and deduplicates every historical weight date to its latest record. The PC agent store remains schema 5 but applies the same one-weight-per-date invariant.
+- Onboarding now captures eating style, familiar cuisine (including Pakistani/Indian/South Asian/Southeast Asian), meals per day, and optional foods to avoid. It requests a Groq-generated flexible example day, while the local Mifflin-St Jeor/TDEE calculation remains the locked source of daily calorie and macro targets.
+- The Goals screen persists the returned meal structure, its deterministic per-meal calorie/protein allocations, practical actions/cautions, and visible WHO, ICMR-NIN 2024, and Dietary Guidelines sources. A PC-agent outage falls back to the local plan without changing targets.
+- Health Connect is integrated as a free, permission-scoped Android import for weight and Strava calorie records. Imported weights are deduplicated by date, and a deliberate in-app check-in wins over an import for that day. It requires the native APK/development build, not Expo Go.
+- The Food screen now uses true most-recently-eaten ordering and distinct **Recent**, **My cookbook**, and **Reference catalog** sections. Food/recipe provenance is shown as Personal recipe, AI estimate, or a reference source; AI-generated recipes are never called approved unless a future explicitly attributed review is stored.
+- `docs/food-data-strategy.md` records the no-cost data and licence strategy. USDA/local ingredient data remain the primary facts; IFCT 2017 is the planned South Asian ingredient expansion; RecipeDB is excluded because its non-commercial licence is unsuitable for a future product.
+- `mobile/eas.json` now provides free EAS `development` and installable `preview` APK profiles. Android clear-text LAN traffic is explicitly enabled because the app intentionally talks to the paired PC agent over local Wi-Fi.
+- Expo project created and linked as `@a-weedy-place/fitness-macro` (project ID `714cf37d-459a-4408-b025-1334f0bfc779`). Preview APK build `19f9ec60-9684-4a18-b68d-d589b5768dd0` was submitted on 2026-08-30 and was still `IN_PROGRESS` at the last check; retrieve it with `cd mobile && npm exec --yes --package=eas-cli -- eas build:list --platform android --limit 1` after it completes.
+- Live agent validation succeeded after this change: the goal endpoint returned a 3-meal Pakistani structure with a locked 2,147 kcal / 148 g protein target. Mobile type-check + 12 tests and agent build + 8 tests pass.
 
-## Free Groq and efficient-agent checkpoint - 2026-08-30
+## Free Groq provider and token-budget checkpoint - 2026-08-30
 
-- New development constraint: speech and reasoning must require no additional subscription or API payment.
-- Groq Free is the only AI runtime provider for Whisper transcription and GPT-OSS food planning. The former Codex CLI process, fallback, goal-advisor, provider-selection, settings, and status code has been removed.
-- The unused local Faster-Whisper/Python service and alternate transcription modes were also removed. The private `GROQ_API_KEY` now directly powers the fixed `whisper-large-v3-turbo` endpoint.
-- The agent now compacts the mobile snapshot to relevant local foods, recipes, and diary records before inference instead of transmitting the full history.
-- Token controls include a context ceiling, low reasoning effort, output cap, stable cacheable prompts, and logged usage.
-- Paid hosted web-search tools are disabled. Broader recipe search, if needed, should use optional self-hosted SearXNG.
-- Exact Windows setup is in `docs/free-groq-agent-setup.md`.
-- Live Windows validation passed for Groq Whisper and GPT-OSS. Saved food nutrition now overrides model arithmetic, all mutations force confirmation, and the aloo-keema plus extra-oil scenario remained two separate log components.
-
+- Zero required spend is a hard product constraint. The recommended development path keeps the Groq account on its Free plan without a payment method.
+- Simplified the runtime to one AI provider: Groq handles Whisper transcription and GPT-OSS planning. All former Codex CLI spawning, provider selection, fallback, goal-advisor code, settings, and status aliases were removed; deterministic nutrition lookup remains the non-AI fallback.
+- Removed the unused local Faster-Whisper/Python service, alternate transcription modes, and combined startup scripts. `GROQ_API_KEY` is now the only AI credential and directly powers the fixed `whisper-large-v3-turbo` transcription endpoint.
+- Groq Whisper Large V3 Turbo can use the same private server-side key as the GPT-OSS reasoning model. The key must never enter an `EXPO_PUBLIC_*` variable.
+- Added compact local retrieval before inference: current-day entries plus a few relevant historical entries, top matching recipes/foods, a hard context-character budget, low reasoning effort, capped output, and terminal token-usage reporting.
+- Paid Groq Compound/web/browser-search tools are deliberately excluded. Existing local foods, USDA index/API, and Open Food Facts remain the no-cost nutrition path.
+- A future broad web-recipe fallback should be optional self-hosted SearXNG. Until then, missing-recipe estimates remain conservative and confirmation-gated.
+- Vercel AI SDK, Mastra, and LangGraph.js were evaluated. A small auditable provider layer is sufficient now; Vercel AI SDK is the leading future option if the tool loop becomes materially more complex.
+- Windows setup and free-plan safeguards are documented in `docs/free-groq-agent-setup.md`.
+- Live validation on the Windows PC passed: Groq Whisper transcribed a temporary WAV exactly and reported `retained: false`; GPT-OSS produced confirmation-gated plans for paratha plus eggs and for an existing aloo-keema recipe plus three separate tablespoons of oil.
+- The live tests exposed and fixed two trust-boundary issues: mutation plans now force confirmation regardless of model output, and saved cookbook nutrition deterministically overrides model-recalculated values.
+- Representative reasoning calls used 1,211-1,293 input tokens and 535-717 output tokens, remaining comfortably within the current personal-use free limits.
 
 ## Current decisions
 - Stack selected: React Native (Expo) with local-first architecture + local PC agent service for enrichment.
@@ -348,59 +375,84 @@ FitnessMacro APK → private hosted FitnessMacro relay → Groq API
 
 ## Food coverage, profile, voice, and Strava checkpoint - 2026-08-07
 
-- Offline food coverage now includes more than 70 common and South Asian foods/ingredients; milk works without the PC agent.
-- Online source order is local cache -> Open Food Facts for packets/barcodes -> USDA FoodData Central for generic ingredients -> optional confirmed Codex suggestions.
-- The profile opens in read mode with goals and a 365-day progress summary; editing is an explicit action.
-- Free local multilingual Faster Whisper is packaged under `agent/voice`; use `npm run voice:setup` once and `npm run dev:full` normally.
-- Strava code is complete but activation requires account-owned API credentials and, under current Strava policy, a subscription-created API app.
-- See `docs/food-data-strategy.md` for dataset decisions and source policy.
+- Expanded the guaranteed offline catalog from 12 foods to more than 70 dishes and ingredients, including whole/low-fat/skim/buffalo milk, dairy, flours, grains, fats, vegetables, aromatics, meats, legumes, fruit, and additional South Asian staples.
+- USDA FoodData Central now falls back to the documented low-limit `DEMO_KEY`, prioritizes generic Foundation/SR/FNDDS results over branded matches, and supports a private free key for normal limits. Open Food Facts remains the packet/barcode source.
+- RecipeDB was evaluated for regional recipe breadth, but is not integrated until stable programmatic access and redistribution terms are confirmed. Recipe macros remain transparently calculated from selected ingredients.
+- The You screen now presents account details, goal direction, target, recorded journey progress, and 365-day logging/intake/weight/activity metrics by default. Profile forms appear only after Edit profile is selected.
+- Added a free local multilingual Faster Whisper service, one-time setup command, and combined voice+agent runtime. Audio is held only in memory/temporary request storage and deleted after transcription.
+- Strava OAuth, refresh, activity import, deduplication, and estimates are implemented. Activation remains blocked only on user-owned Strava API client credentials; current Strava policy also requires a subscription to create an app.
+- Local test configuration uses a matching private pairing token and does not invoke, log out, or modify the Codex CLI account.
 
-## Ingredient and voice completion pass - 2026-08-07
+## Ingredient index, portions, visuals, and voice UX - 2026-08-07
 
-- USDA SR Legacy is now locally indexable and searched before network results, giving the recipe builder thousands of generic ingredient records.
-- All food surfaces derive a category emoji, including remote and custom records.
-- Quantity controls support g/kg/ml/cup/tbsp/tsp/piece/slice/bowl/plate/serving with gram-normalized nutrition math.
-- Recipe AI returns separate ingredients; each ingredient stays editable and can be replaced through local index search.
-- Shared UI is denser and long text wraps/shrinks inside cards and controls.
-- Voice uses actual microphone metering, a silent flatline, an explicit processing spinner, and persistent error feedback.
-- Strava credentials remain an account-owner action; OAuth/import code is already implemented.
+- Added a local index builder for the official USDA SR Legacy JSON archive. It provides thousands of generic ingredient records without consuming API limits and is searched before remote branded results.
+- Recipe construction can search the full PC ingredient index, and Codex recipe requests explicitly return separate editable ingredients rather than one finished-dish estimate.
+- Added deterministic category emojis for every local, USDA, Open Food Facts, custom, recipe, and AI food across library, quick logging, recipes, and diary rows.
+- Added quantity entry in g, kg, ml, cup, tbsp, tsp, piece, slice, bowl, plate, or serving. Nutrition remains gram-normalized; approximate volume/common-container conversions are visibly labeled.
+- Reduced shared typography, card padding, controls, and timeline sizing; long button, title, source, and food text now shrinks/wraps instead of leaving its container.
+- Voice recording now uses microphone dB metering: silence is a flatline and speech drives the bars. Processing has an explicit spinner and failures remain visible.
+- `npm run dev:full` is idempotent when both services are already healthy and reports stale partial services without raw port-binding stack traces.
+- Strava code remains complete, but the API application and secret cannot be created by this project; they must be created by the Strava account owner.
 
-## Progressive logging redesign - 2026-08-07
+## Progressive logging UX and Android voice upload - 2026-08-07
 
-- Android audio now uploads with Expo File and expo/fetch rather than the unreliable file-URI Blob conversion.
-- Today uses a clean week strip, target bars, current-time logging, and a condensed event timeline.
-- Food search and quick logging show compact rows and direct add controls; advanced quantity controls are disclosed only when editing.
-- Food/dish detail shows selected-portion macros and complete per-ingredient recipe nutrition.
-- Body/activity/sync controls are collapsed until requested.
+- Replaced Android `fetch(fileUri).blob()` recording upload with Expo SDK 57 `File` plus `expo/fetch`, including an explicit empty-file guard before network upload.
+- Redesigned Today around a compact seven-day strip, four target bars, one Log food now action, and a condensed timeline containing only logged times.
+- Logging no longer asks for time in the normal flow. The current time is captured when the logger opens; tapping an existing timeline time remains the deliberate backdate path.
+- Rebuilt food discovery as a compact recent/results list with direct plus actions. Quantity and unit controls appear only after opening a food or tapping a selected plate item.
+- Added a dedicated food/dish detail sheet with selected-portion calories/macros. Recipe dishes list every ingredient, ingredient quantity, calories, protein, fat, and carbs.
+- Weight, activity, and synchronization controls are collapsed on Today until explicitly requested.
+# 2026-08-07 - AI action planner and themes
+
+- Voice transcription now feeds a structured Codex action planner rather than stopping at food candidates.
+- Supported actions are logging resolved foods, creating a reusable ingredient-based dish and logging it, or asking one material clarification.
+- AI-created dishes retain ingredients, per-ingredient quantities, confidence, calculated macros, and the source transcript.
+- Search prioritizes the user's recipes and manual foods before common database results.
+- Appearance themes are Warm Harvest (default/original direction), Clean Neutral, and Charcoal. Theme preference is stored locally on the phone.
+# 2026-08-07 - Android integration decision
+
+- Deprecated core SafeAreaView usage was migrated to react-native-safe-area-context and the New Architecture LayoutAnimation no-op opt-in was removed.
+- Do not scrape Strava: Strava API Policy 5.5 explicitly prohibits automated scraping and extraction.
+- Preferred calorie-only Android path is Strava -> Health Connect -> FitnessMacro, limited to calorie records written by Strava. This requires a development build rather than stock Expo Go.
+- The existing personal Strava OAuth API path remains a free, rate-limited alternative in Single Player Mode.
+# 2026-08-07 - AI-native control plane
+
+- The AI assistant is a primary bottom-tab destination, not only a food resolver.
+- The app exposes a typed capability snapshot and stable record IDs to a specialized local Codex app agent.
+- Read-only questions execute without confirmation. All mutations are returned as explicit action plans and require one user confirmation.
+- Supported writes cover foods, dishes, weights, activities, diary time/date changes, deletion, goals, profile patches, plans, and navigation.
+- Health Connect is configured through react-native-health-connect. It reads only calorie records originating from com.strava, preferring ActiveCaloriesBurned and falling back to TotalCaloriesBurned without combining both.
+- Health Connect sync runs when the Android app enters the foreground after one explicit permission grant. Expo Go remains usable for non-native screens; Health Connect needs the FitnessMacro development build.
 
 ## Current product source of truth — 2026-09-01
 
-- FitnessMacro is a standalone local-first Android nutrition diary. The app must work without a PC, LAN address, Codex CLI, local Whisper process, or manually supplied API key. Phone data includes the profile, food library, recipes, diary, goals, weight, activities, trends, PIN, and portable backup.
-- AI architecture: APK → private Cloudflare Worker → Groq. Groq secrets remain only in Cloudflare. The APK uses a revocable preview access token, never a Groq key. Groq Whisper (`whisper-large-v3-turbo`) provides transcription; Groq-hosted `openai/gpt-oss-120b` produces reviewed action plans and meal-structure recommendations.
-- The retired PC agent/Codex/local Whisper route is historical only and must not be reintroduced. All manual logging/search/editing remain available even when AI is unavailable.
-- AI mutations are plans requiring owner confirmation. The agent can propose food, recipes, weight, activity, diary time/date, goals, or deletion changes; it must never write silently.
-- The preview-environment relay was verified 2026-09-01: both `/v1/audio/status` and `/v1/agent/status` returned HTTP 200 using the APK environment (without printing any token). Integration statuses must be independently refreshed/displayed to avoid false “unavailable” messages.
-- Android navigation controls remain visible and all application content reserves safe-area space above them. Keyboard mode is resize so the Assistant composer remains above the Android keyboard.
-- Keep the main Goals tab compact; optional adaptive-maintenance and flexible-plan rationale is in You → Goals & daily plan. Use device time by default, with Pakistan UTC+5 selectable.
-- Visual design direction: preserve the owner’s original theme palettes, retain compact cards and equal tab icons, and avoid special multicolour metric-card/AI-dashboard treatments. Theme selection saves in place without a forced relaunch and applies on the next normal app open.
-- Voice is compact record → ephemeral upload → editable transcript. Show live audio-meter bars/timer while recording; never retain raw audio.
-- Offline catalog is 108 foods/ingredients including regional staples; it merges into existing phone data. Search has aliases and related results, e.g. `mash ke daal` returns mash/urad/dal. Starter nutrition values are editable estimates.
-- Health Connect is a free optional Android integration and needs the preview/dev APK, not Expo Go.
-- At this checkpoint TypeScript passes and all 13 mobile core tests pass. The next owner artifact is a new EAS preview APK after this UI/reliability stage.
+- FitnessMacro is a standalone, local-first Android nutrition diary. The phone owns the profile, cookbook, recipes, diary entries, weight, activities, daily goals, trends, PIN, and portable backup. It must never require a PC, LAN address, Codex CLI, local Whisper server, or a manually entered API key.
+- AI is a hosted but no-subscription preview path: APK → private Cloudflare Worker → Groq. The Worker keeps the Groq key server-side; the APK has only a revocable preview access token. Speech transcription uses Groq `whisper-large-v3-turbo`; the action planner/meal-structure reasoning uses Groq-hosted `openai/gpt-oss-120b`.
+- AI proposes actions; it never writes silently. Food, recipe, weight, activity, date/time, goal, and deletion operations are returned as an editable/reviewable plan and require the owner’s confirmation. All manual flows remain available when AI/search is unavailable.
+- The previous PC-agent, Codex CLI, provider-selection, and local-Whisper architecture is retired historical material only. Do not restore it or add a phone-to-PC dependency.
+- The hosted relay is confirmed healthy in the exact `preview` APK environment on 2026-09-01: `/v1/audio/status` and `/v1/agent/status` both returned HTTP 200. A UI status must report each endpoint independently so one delayed check does not incorrectly mark both unavailable.
+- Android system back/home controls must stay visible. The app must reserve safe-area space above them; `expo-navigation-bar` is configured with `hidden: false`, and Android uses `softwareKeyboardLayoutMode: resize` so the Assistant composer moves above the keyboard.
+- The normal diary is a Monday-to-Sunday week strip in the device time zone (device time by default, Pakistan UTC+5 available in You → Date & time). Food entries remain manually editable for date/time/quantity; daily weight is one editable check-in per calendar day.
+- The main Goals tab is intentionally short: current direction, target, daily numbers, and reusable templates. The optional explanation of adaptive maintenance and the flexible AI meal structure lives in You → Goals & daily plan.
+- UI direction is quiet and practical, not an “AI dashboard”: preserve the owner’s original Warm Harvest / Neutral / Charcoal / Ocean / Orchid theme palettes, but avoid special oversized AI navigation and multicolour metric-card treatments. Theme choice saves in place without forcing a relaunch; it applies on the next normal app open while styles remain static.
+- Voice is record → transient upload → transcript → user review/send. Recording shows live microphone-meter bars and a timer; no raw recording is retained by the app or relay.
+- Offline catalog currently includes 108 starter foods/ingredients, with Pakistani, Indian, and South Asian staples such as whole-wheat roti, paratha, mash/urad daal, masoor, moong, chana daal, aloo keema, karahi, pulao, nihari, haleem, kebabs, dosa, idli, and sambar. Existing installations merge new starter foods at launch. Search uses aliases and related-word matching (for example `mash ke daal` → mash/urad/dal) and must show related matches rather than blank results where possible. Starter macros are editable estimates, not clinical or package-label claims.
+- Health Connect itself is free and can be used in standalone builds. It is optional and must not block diary/AI features. Expo Go cannot test the native Health Connect module; preview APKs are the normal owner test artifact.
+- Current feedback stage implementation includes: compact transcript-only mic, activity type chips, simplified goals/trends, improved profile/service labels, live voice bars, search aliases, and Android safe-area/keyboard fixes. TypeScript and the 13 mobile core tests pass before each APK build.
 
 ### Strava activity import decision — researched 2026-09-01
 
-- Preferred free path: **Strava Android → Health Connect → FitnessMacro**. Strava officially writes time, distance, and calories for GPS-based activities to Health Connect. FitnessMacro can read the resulting `ActiveCaloriesBurned` records (with Total Calories only as a fallback) without a Strava API application, API key, client secret, or Strava subscription.
-- FitnessMacro's present sync runs on app foreground/open after Health Connect permission. Background automatic reads are possible later only with Health Connect Background Read permission and scheduled Android work.
-- A future native polish pass should import exercise sessions as well as calories, keep the Health Connect source attribution/record ID, dedupe robustly, and display workout type/name/distance rather than generic calorie intervals.
-- Do not choose direct Strava API for the zero-budget product: it needs OAuth, server-held refresh credentials and a webhook/callback; as of Sep 2026, creating/using a Standard Tier API application requires a Strava subscription. Current API policy also limits agent-mediated/intermediary use.
+- Use the free Android route: **Strava Android → Health Connect → FitnessMacro**. Strava officially writes time, distance, and calorie data from GPS-based activities to Health Connect; FitnessMacro reads Health Connect `ActiveCaloriesBurned` first, with `TotalCaloriesBurned` only as a fallback, so it must not add both. This requires no Strava developer API application, no client secret, and no subscription.
+- The Android Strava package is `com.strava`. A future polish pass should request/read exercise-session data as well as active calories, attribute imported records to their Health Connect source, deduplicate by source record ID, and expose the real workout name/type/distance rather than the current generic calorie-record rows. Do not filter all imports to Strava until a source selector exists: other trackers may be useful, and filtering previously made valid imports appear empty.
+- Existing runtime behavior is automatic **on FitnessMacro foreground/open** after the one-time Health Connect permission. Truly background automatic reads require Health Connect's additional Background Read permission plus scheduled Android work; it is an optional later enhancement, not needed for the free core path.
+- Direct Strava API integration is technically feasible (OAuth, secure refresh-token storage, hosted callback/webhook, activity reads) but is outside the zero-budget path. As of September 2026, Strava requires an active Strava subscription to create/use a Standard Tier API app, and current API policy restricts agent-mediated/intermediary re-exposure. Do not use it for this owner-only product unless the subscription constraint changes or the owner explicitly accepts it.
 
 ## Current product source of truth — Health Connect and branding update, 2026-09-01
 
-- Public Android name: **Weed Fitness**. Preserve the EAS slug and Android package `fitness-macro` / `com.ashar.fitnessmacro`, so this is an upgrade rather than a data-losing second app. The launcher asset is `mobile/assets/weed-fitness-icon.png`.
-- Free activity route: **Strava Android → Health Connect → Weed Fitness**. Do not reintroduce direct Strava API/OAuth, a subscription, a PC, or a desktop service.
-- The Android Health Connect scopes are `ExerciseSession`, `ActiveCaloriesBurned`, `Distance`, and `Weight`. An owner updating from an earlier APK must tap **You → Connections → Update access** once and allow the added workout/distance scopes.
-- Foreground/on-open sync covers 30 days. It reads paginated workout sessions first and retains tracker source, title/type, duration, distance, and active calories. Near-identical copies are deduplicated with Strava preferred; associated calorie intervals are excluded; only non-session activity is grouped into source-labelled daily summaries. This avoids double-counting a Strava workout.
-- Do not use `TotalCaloriesBurned` as exercise burn: it includes basal energy. Display sessions even when a tracker exposes no active-calorie record. Keep manual activity and deliberate in-app weight check-ins higher priority than imports.
-- Health Connect is Android-only and free, and requires the preview APK rather than Expo Go. Background sync and older-than-default 30-day history need an explicit, later privacy-reviewed permission/scheduling stage.
-- Validation: mobile type-check, **13/13** core tests, and Expo configuration resolve cleanly. Next deliverable: new preview APK from this revision.
+- The public Android app name is now **Weed Fitness**. The EAS project slug and Android package deliberately remain `fitness-macro` / `com.ashar.fitnessmacro`, so the next APK upgrades the existing installation instead of creating a data-losing second app. The generated W/leaf/dumbbell launcher icon is `mobile/assets/weed-fitness-icon.png`.
+- The free activity route is **Strava Android → Health Connect → Weed Fitness**. There is no direct Strava API, OAuth client, subscription, API key, server-held Strava token, or PC dependency.
+- Health Connect now requests read access for `ExerciseSession`, `ActiveCaloriesBurned`, `Distance`, and `Weight`. Existing owners must tap **You → Connections → Update access** once after installing this build to grant the added workout/distance scopes.
+- Foreground/on-open sync imports the last 30 days. It reads paginated exercise sessions first, retaining tracker source, title/type, duration, distance, and active calories. It prefers the Strava copy of a near-identical duplicated session, excludes session-associated calorie intervals, and only groups remaining active-calorie intervals into source-labelled daily activity summaries. This prevents the same workout being counted both as a session and as a raw calorie row.
+- Sessions without an exposed active-calorie record are still shown with `0 kcal`; `TotalCaloriesBurned` is deliberately not used because it includes basal energy and would inflate exercise burn. Manual activity and deliberate in-app weight check-ins remain higher priority than imports.
+- Health Connect stays Android-only and free, and requires the preview APK rather than Expo Go. Background import and history older than Health Connect’s default 30-day window are intentionally deferred: they need extra Android permissions/scheduling and a separate privacy review.
+- Validation after this stage: mobile type-check, **13/13** core tests, and resolved Expo configuration pass. The next required artifact is a preview APK built from this revision.

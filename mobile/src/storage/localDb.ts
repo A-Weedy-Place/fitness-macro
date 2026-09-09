@@ -1,13 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityEntry, AppState, BodyMetricLog, DailyGoal, FoodEntry, FoodItem, MealPlan, MealPlanItem, Recipe, RecipeIngredient, UserProfile } from '../types';
 import { STARTER_FOODS } from '../data/starterFoods';
+import { gramsForQuantity } from '../logic/portions';
+import { createDurableWriter } from './serialStore';
 
-const KEY = 'fitness-app-state-v7';
-const LEGACY_KEYS = ['fitness-app-state-v6', 'fitness-app-state-v5', 'fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
+const KEY = 'fitness-app-state-v8';
+const LEGACY_KEYS = ['fitness-app-state-v7', 'fitness-app-state-v6', 'fitness-app-state-v5', 'fitness-app-state-v4', 'fitness-app-state-v3', 'fitness-app-state-v2'];
 const RECOVERY_KEY = 'fitness-app-state-startup-recovery-v1';
+const RESTORE_RECOVERY_KEY = 'fitness-app-state-pre-restore-v1';
+const writer = createDurableWriter(AsyncStorage);
 
 export const EMPTY_STATE: AppState = {
-  version: 7,
+  version: 8,
   foods: [...STARTER_FOODS],
   entries: [],
   weights: [],
@@ -26,7 +30,23 @@ function records<T>(value: unknown): T[] {
 function validFood(value: FoodItem): boolean {
   return typeof value.id === 'string' && Boolean(value.id) && typeof value.name === 'string' && Boolean(value.name)
     && Boolean(value.serving) && typeof value.serving === 'object'
-    && Boolean(value.nutrition) && typeof value.nutrition === 'object';
+    && Boolean(value.nutrition) && typeof value.nutrition === 'object'
+    && Number.isFinite(value.serving.gramsPerUnit) && value.serving.gramsPerUnit > 0
+    && typeof value.serving.unit === 'string'
+    && ['calories', 'protein', 'carbs', 'fat'].every((key) => Number.isFinite(value.nutrition[key as keyof typeof value.nutrition]) && Number(value.nutrition[key as keyof typeof value.nutrition]) >= 0);
+}
+
+function validSnapshot(value: FoodEntry['nutritionSnapshot']): boolean {
+  return Boolean(value) && ['grams', 'calories', 'protein', 'carbs', 'fat'].every((key) => Number.isFinite(value![key as keyof NonNullable<typeof value>]) && value![key as keyof NonNullable<typeof value>] >= 0);
+}
+
+/** Freeze the nutrition that was actually logged. Existing valid snapshots are
+ * preserved during upgrades and metadata edits; portion edits recapture below. */
+export function snapshotEntry(entry: FoodEntry, food?: FoodItem): FoodEntry {
+  if (validSnapshot(entry.nutritionSnapshot)) return entry;
+  if (!food || !validFood(food)) return { ...entry, nutritionSnapshot: undefined };
+  const grams = gramsForQuantity(food, entry.portion.quantity, entry.portion.unit);
+  return { ...entry, nutritionSnapshot: { grams, calories: food.nutrition.calories * grams / 100, protein: food.nutrition.protein * grams / 100, carbs: food.nutrition.carbs * grams / 100, fat: food.nutrition.fat * grams / 100 } };
 }
 
 function normalizeEntry(value: FoodEntry): FoodEntry | null {
@@ -59,62 +79,94 @@ function normalizeRecipe(value: Recipe): Recipe | null {
 export function migrateState(value: unknown): AppState {
   const input = value && typeof value === 'object' ? value as Partial<AppState> & { version?: number } : {};
   const foods = new Map(STARTER_FOODS.map((food) => [food.id, food]));
-  for (const food of records<FoodItem>(input.foods)) if (validFood(food)) foods.set(food.id, food);
+  for (const food of records<FoodItem>(input.foods)) if (validFood(food)) foods.set(food.id, { ...food, source: food.source && typeof food.source === 'object' ? food.source : { source: 'manual' } });
   const weightsByDate = new Map<string, BodyMetricLog>();
   for (const weight of records<BodyMetricLog>(input.weights)) {
     if (typeof weight.id === 'string' && typeof weight.date === 'string' && Number.isFinite(Number(weight.weightKg))) {
-      const normalized = { ...weight, weightKg: Number(weight.weightKg), enteredAt: typeof weight.enteredAt === 'string' ? weight.enteredAt : '' };
+      const source: BodyMetricLog['source'] = weight.source === 'manual' || weight.source === 'health_connect' ? weight.source : weight.id.startsWith('health_weight_') && typeof weight.notes === 'string' && weight.notes.startsWith('Imported from Health Connect') ? 'health_connect' : 'manual';
+      const normalized = { ...weight, source, weightKg: Number(weight.weightKg), enteredAt: typeof weight.enteredAt === 'string' ? weight.enteredAt : '' };
       const current = weightsByDate.get(weight.date);
       if (!current || normalized.enteredAt >= current.enteredAt) weightsByDate.set(weight.date, normalized);
     }
   }
   return {
-    version: 7,
+    version: 8,
     profile: input.profile ? { ...input.profile, onboardingComplete: input.profile.onboardingComplete ?? true } : undefined,
     foods: [...foods.values()],
-    entries: records<FoodEntry>(input.entries).map(normalizeEntry).filter((entry): entry is FoodEntry => Boolean(entry)),
+    entries: records<FoodEntry>(input.entries).map(normalizeEntry).filter((entry): entry is FoodEntry => Boolean(entry)).map((entry) => snapshotEntry(entry, foods.get(entry.foodId))),
     weights: [...weightsByDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     activities: records<ActivityEntry>(input.activities).filter((item) => typeof item.id === 'string' && typeof item.date === 'string'),
     goals: records<DailyGoal>(input.goals).filter((item) => typeof item.date === 'string'),
     plans: records<MealPlan>(input.plans).map(normalizePlan).filter((plan): plan is MealPlan => Boolean(plan)),
     recipes: records<Recipe>(input.recipes).map(normalizeRecipe).filter((recipe): recipe is Recipe => Boolean(recipe)),
-    nutritionProgram: input.nutritionProgram
+    nutritionProgram: input.nutritionProgram,
+    completedFoodDays: Array.isArray(input.completedFoodDays) ? input.completedFoodDays.filter((day) => typeof day === 'string') : [],
+    goalHistory: Array.isArray(input.goalHistory) ? input.goalHistory : [],
+    assistantMessages: Array.isArray(input.assistantMessages) ? input.assistantMessages.filter((message) => message && typeof message.text === 'string' && (message.role === 'user' || message.role === 'assistant')) : [],
+    assistantPlan: input.assistantPlan && Array.isArray(input.assistantPlan.actions) ? input.assistantPlan : null
   };
 }
 
-export async function loadState(): Promise<AppState> {
-  const current = await AsyncStorage.getItem(KEY);
-  const candidates: Array<{ key: string; raw: string }> = [];
-  if (current) candidates.push({ key: KEY, raw: current });
-  for (const key of LEGACY_KEYS) {
-    const raw = await AsyncStorage.getItem(key);
-    if (raw) candidates.push({ key, raw });
+/** Row migration applies only to a recognized stored account. Unrelated valid
+ * JSON must not be mistaken for an intentionally empty diary. */
+export function decodeStoredState(raw: string): AppState {
+  const value: unknown = JSON.parse(raw);
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as Partial<AppState>).foods) || !Array.isArray((value as Partial<AppState>).entries)) {
+    throw new Error('The stored diary is incomplete and needs recovery.');
   }
+  return migrateState(value);
+}
+
+export async function loadState(): Promise<AppState> {
+  let hadCandidate = false;
   let preservedInvalidState = false;
-  for (const candidate of candidates) {
+  // Do not read old keys unless needed. A damaged/oversized legacy row cannot
+  // prevent a healthy current account from opening.
+  for (const key of [KEY, ...LEGACY_KEYS]) {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) continue;
+    hadCandidate = true;
+    let state: AppState;
     try {
-      const state = migrateState(JSON.parse(candidate.raw));
-      await saveState(state);
-      return state;
+      state = decodeStoredState(raw);
     } catch (error) {
       // AsyncStorage writes are atomic, but retain any unreadable historical
       // value before allowing the owner back into the app with another copy.
       try {
         if (preservedInvalidState) continue;
-        await AsyncStorage.setItem(RECOVERY_KEY, JSON.stringify({ capturedAt: new Date().toISOString(), sourceKey: candidate.key, raw: candidate.raw, error: error instanceof Error ? error.message : String(error) }));
+        await AsyncStorage.setItem(RECOVERY_KEY, JSON.stringify({ capturedAt: new Date().toISOString(), sourceKey: key, raw, error: error instanceof Error ? error.message : String(error) }));
         preservedInvalidState = true;
       } catch {
-        // Never replace an unreadable current value unless its raw bytes were
-        // first preserved for a later recovery tool.
+        // Do not continue to an older candidate: that would overwrite the
+        // newest unreadable diary without a recoverable copy of its bytes.
+        throw new Error('Your unreadable diary could not be backed up safely. Free some device storage and reopen the app; the original data has not been replaced.');
       }
+      continue;
     }
+    // A disk-write failure is not a corrupt backup. Never fall back to older
+    // user data merely because storage is full or temporarily unavailable.
+    await saveState(state);
+    return state;
   }
-  if (!current || preservedInvalidState) await saveState(EMPTY_STATE);
+  if (hadCandidate && !preservedInvalidState) throw new Error('Your unreadable diary could not be backed up safely. Free some device storage and reopen the app; the original data has not been replaced.');
+  await saveState(EMPTY_STATE);
   return EMPTY_STATE;
 }
 
 export async function saveState(state: AppState): Promise<void> {
-  await AsyncStorage.setItem(KEY, JSON.stringify(state));
+  await writer.save(KEY, state);
+}
+
+export async function preservePreRestoreState(state: AppState): Promise<void> {
+  await writer.save(RESTORE_RECOVERY_KEY, { capturedAt: new Date().toISOString(), state });
+}
+
+export async function loadPreRestoreRecovery(): Promise<AppState | null> {
+  await writer.settled();
+  const raw = await AsyncStorage.getItem(RESTORE_RECOVERY_KEY);
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as { state?: unknown };
+  return parsed.state ? migrateState(parsed.state) : null;
 }
 
 function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
@@ -130,7 +182,11 @@ export function upsertFood(state: AppState, food: FoodItem): AppState {
 }
 
 export function upsertEntry(state: AppState, entry: FoodEntry): AppState {
-  return { ...state, entries: upsertById(state.entries, entry) };
+  const previous = state.entries.find((item) => item.id === entry.id);
+  const samePortion = previous && previous.foodId === entry.foodId && previous.portion.quantity === entry.portion.quantity && previous.portion.unit === entry.portion.unit;
+  const captured = snapshotEntry({ ...entry, nutritionSnapshot: samePortion ? previous.nutritionSnapshot || entry.nutritionSnapshot : previous ? undefined : entry.nutritionSnapshot }, state.foods.find((food) => food.id === entry.foodId));
+  const changedDates = new Set([entry.date, previous?.date].filter(Boolean));
+  return { ...state, entries: upsertById(state.entries, captured), completedFoodDays: state.completedFoodDays?.filter((day) => !changedDates.has(day)) };
 }
 
 export function upsertWeight(state: AppState, weight: BodyMetricLog): AppState {
@@ -156,7 +212,8 @@ export function upsertRecipe(state: AppState, recipe: Recipe): AppState {
 }
 
 export function removeEntry(state: AppState, id: string): AppState {
-  return { ...state, entries: state.entries.filter((entry) => entry.id !== id) };
+  const date = state.entries.find((entry) => entry.id === id)?.date;
+  return { ...state, entries: state.entries.filter((entry) => entry.id !== id), completedFoodDays: state.completedFoodDays?.filter((day) => day !== date) };
 }
 
 export function removeWeight(state: AppState, id: string): AppState {

@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { BodyMetricLog } from '../types';
@@ -13,7 +14,7 @@ export function WeightRow({ item, unit = 'kg', onDelete }: { item: BodyMetricLog
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     paddingVertical: 10,
     flexDirection: 'row',
@@ -32,4 +33,4 @@ const styles = StyleSheet.create({
   copy: { flex: 1 },
   remove: { backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 },
   delete: { color: colors.danger, fontSize: 9, fontWeight: '900' }
-});
+}));

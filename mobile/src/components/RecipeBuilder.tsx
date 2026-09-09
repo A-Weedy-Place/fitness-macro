@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -49,9 +50,9 @@ export function RecipeBuilder({ foods, recipe, recipeFood, onSearch, onResolve, 
   </Card>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   or: { color: colors.faint, fontSize: 8, fontWeight: '900', letterSpacing: 1, textAlign: 'center', marginVertical: 13 }, suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9, marginBottom: 12 }, suggestion: { width: '48.5%', minHeight: 48, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.pineSoft, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 13 }, suggestionEmoji: { fontSize: 17, marginRight: 6 }, suggestionText: { color: colors.pine, fontSize: 9, lineHeight: 12, fontWeight: '800', flex: 1, flexShrink: 1 },
   iconLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 7 }, iconRail: { gap: 7, paddingBottom: 12 }, iconChoice: { width: 43, height: 43, borderRadius: 13, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' }, iconChoiceSelected: { borderColor: colors.pine, borderWidth: 2, backgroundColor: colors.pineSoft }, iconText: { fontSize: 24 },
   visual: { alignItems: 'center', marginBottom: 7 }, photo: { width: 72, height: 72, borderRadius: 20, backgroundColor: colors.paperDeep }, visualEmoji: { fontSize: 48, height: 61 }, visualActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 5 }, row: { borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 8 }, ingredientTitle: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 5 }, emoji: { fontSize: 20 }, name: { color: colors.ink, fontWeight: '800', fontSize: 11, flex: 1, flexShrink: 1 }, remove: { backgroundColor: colors.coralSoft, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 6 }, removeText: { color: colors.danger, fontSize: 8, fontWeight: '900' },
   columns: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }, half: { width: '48.5%' }, summary: { backgroundColor: colors.paper, borderRadius: 13, padding: 10, marginBottom: 9 }, summaryValue: { color: colors.pine, fontSize: 16, fontWeight: '900' }, summaryText: { color: colors.muted, fontSize: 9, lineHeight: 14, marginTop: 3 }, gap: { height: 6 }
-});
+}));

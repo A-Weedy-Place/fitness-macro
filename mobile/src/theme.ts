@@ -1,4 +1,6 @@
 import { File, Paths } from 'expo-file-system';
+import { useSyncExternalStore } from 'react';
+import { StyleSheet } from 'react-native';
 
 export type AppThemeName = 'warm' | 'neutral' | 'charcoal' | 'ocean' | 'orchid';
 
@@ -53,18 +55,39 @@ function readTheme(): AppThemeName {
   }
 }
 
-export const activeTheme = readTheme();
-export const colors = activeTheme === 'neutral' ? neutral : activeTheme === 'charcoal' ? charcoal : activeTheme === 'ocean' ? ocean : activeTheme === 'orchid' ? orchid : warm;
-export const isDarkTheme = activeTheme === 'charcoal';
-export const atmosphere = activeTheme === 'charcoal'
+export let activeTheme = readTheme();
+const palettes = { warm, neutral, charcoal, ocean, orchid };
+export let colors = palettes[activeTheme];
+export let isDarkTheme = activeTheme === 'charcoal';
+function themeAtmosphere() { return activeTheme === 'charcoal'
   ? { one: '#26372E', two: '#40261F' }
   : activeTheme === 'neutral' ? { one: '#F4DCCB', two: '#D7E6DD' }
     : activeTheme === 'ocean' ? { one: '#C8E8ED', two: '#D8E8F5' }
-      : activeTheme === 'orchid' ? { one: '#EAD7EA', two: '#E9D9C7' } : { one: '#EBC7AE', two: '#BFD8C8' };
+      : activeTheme === 'orchid' ? { one: '#EAD7EA', two: '#E9D9C7' } : { one: '#EBC7AE', two: '#BFD8C8' }; }
+export let atmosphere = themeAtmosphere();
+const listeners = new Set<() => void>();
+export function useAppTheme(): AppThemeName {
+  return useSyncExternalStore((listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => activeTheme, () => 'warm');
+}
+
+/** Re-evaluate static-style factories on palette changes without remounting screens. */
+export function themedStyles<T extends StyleSheet.NamedStyles<T>>(factory: () => T): T {
+  let name: AppThemeName | undefined;
+  let cached: T;
+  return new Proxy({} as T, { get(_target, property) {
+    if (name !== activeTheme) { cached = StyleSheet.create(factory()); name = activeTheme; }
+    return Reflect.get(cached, property);
+  } });
+}
 
 export function saveAppTheme(theme: AppThemeName): void {
   if (!themeFile.exists) themeFile.create({ intermediates: true });
   themeFile.write(theme);
+  activeTheme = theme;
+  colors = palettes[theme];
+  isDarkTheme = theme === 'charcoal';
+  atmosphere = themeAtmosphere();
+  listeners.forEach((listener) => listener());
 }
 
 /** The palette is read while static React Native styles initialise. Store the
@@ -90,4 +113,4 @@ export function consumeThemeAppearanceReturn(): boolean {
 }
 
 export const radii = { small: 10, medium: 16, large: 24, pill: 999 } as const;
-export const shadows = { card: { shadowColor: isDarkTheme ? '#000000' : '#3B3120', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDarkTheme ? 0.2 : 0.08, shadowRadius: 18, elevation: 3 } } as const;
+export const shadows = { get card() { return { shadowColor: isDarkTheme ? '#000000' : '#3B3120', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDarkTheme ? 0.2 : 0.08, shadowRadius: 18, elevation: 3 } as const; } };

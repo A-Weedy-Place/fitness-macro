@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -56,7 +57,7 @@ export function VoiceRecorder({ onRecorded, disabled = false }: { onRecorded: (u
   </View>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   wrap: { alignItems: 'center', justifyContent: 'flex-start', gap: 3, minWidth: 43 },
   button: { width: 43, height: 43, borderRadius: 15, backgroundColor: colors.pine, alignItems: 'center', justifyContent: 'center' },
   recording: { backgroundColor: colors.coral },
@@ -65,4 +66,4 @@ const styles = StyleSheet.create({
   wave: { height: 22, flexDirection: 'row', alignItems: 'center', gap: 2 },
   waveBar: { width: 2, borderRadius: 2, backgroundColor: colors.pine },
   error: { position: 'absolute', top: 47, width: 150, color: colors.danger, fontSize: 8, lineHeight: 11, textAlign: 'center' }
-});
+}));

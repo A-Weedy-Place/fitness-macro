@@ -13,6 +13,9 @@ It never sends the Groq key, relay access token, local PIN, raw voice audio, dev
 
 ## Storage and removal
 
+- Queue operations are serialized. A successful upload acknowledges only the sent event IDs, keeping events created during that request. Both individual events and batches are limited by UTF-8 byte size; oversized payloads produce visible truncation markers. The bounded offline queue reports drops rather than claiming perfect retention. You → Backup & restore exposes upload/queue/error status.
+- Route rate limits are independent durable D1 buckets, so status checks and diagnostics cannot spend the reasoning quota. Public release must replace the shared preview token with real account/device authorization; that is separate from the owner-approved private diagnostics scope.
+
 - Only APKs built from the Expo `preview` environment receive `EXPO_PUBLIC_TEST_TELEMETRY=enabled`. Production does not.
 - Events are written through the existing private Cloudflare Worker into the private D1 database `weed-fitness-test-telemetry`; it is not in GitHub and is not public.
 - The Worker removes records older than 90 days. **You → Backup & restore → Clear this phone's cloud test data** immediately deletes the remote events associated with that test phone; subsequent preview activity starts a new trail automatically.

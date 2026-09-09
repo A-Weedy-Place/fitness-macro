@@ -51,6 +51,7 @@ export interface FoodEntry {
   note?: string;
   enteredAt: string;
   source: SourceMeta;
+  nutritionSnapshot?: { grams: number; calories: number; protein: number; carbs: number; fat: number };
 }
 
 export interface BodyMetricLog {
@@ -61,6 +62,8 @@ export interface BodyMetricLog {
   waistCm?: number;
   notes?: string;
   enteredAt: string;
+  source?: 'manual' | 'health_connect';
+  healthConnect?: { time: string; recordId: string };
 }
 
 export interface ActivityEntry {
@@ -70,6 +73,7 @@ export interface ActivityEntry {
   source: 'strava' | 'health_connect' | 'manual';
   /** The originating tracker when this was imported through Health Connect. */
   importSource?: string;
+  healthConnect?: { startTime: string; endTime: string; recordId?: string };
   type: string;
   durationMinutes: number;
   distanceMeters?: number;
@@ -165,6 +169,9 @@ export interface AssistantIngredient {
 export type AssistantActionType = 'log_foods' | 'save_food' | 'create_recipe' | 'create_recipe_and_log' | 'log_weight' | 'log_activity' | 'change_entry_time' | 'delete_entry' | 'delete_weight' | 'delete_activity' | 'set_goal' | 'update_profile' | 'create_plan_from_day' | 'apply_plan' | 'delete_plan' | 'navigate';
 
 export interface AssistantAction {
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceLicense?: string;
   type: AssistantActionType; summary: string; confidence: number; targetId: string | null; date: string | null; time: string | null; name: string | null;
   value: number | null; quantity: number | null; servings: number | null; durationMinutes: number | null; calories: number | null; protein: number | null; carbs: number | null; fat: number | null;
   displayName: string | null; targetWeightKg: number | null; activityFactor: number | null; goalMode: 'lose' | 'maintain' | 'gain' | 'recompose' | null;
@@ -234,7 +241,7 @@ export type MealPlanInput = Pick<MealPlan, 'name' | 'description'> & {
 };
 
 export interface AppState {
-  version: 7;
+  version: 8;
   profile?: UserProfile;
   foods: FoodItem[];
   entries: FoodEntry[];
@@ -244,4 +251,8 @@ export interface AppState {
   plans: MealPlan[];
   recipes: Recipe[];
   nutritionProgram?: NutritionProgram;
+  completedFoodDays?: string[];
+  goalHistory?: Array<{ effectiveFrom: string; calories: number; protein: number; carbs: number; fat: number }>;
+  assistantMessages?: AssistantMessage[];
+  assistantPlan?: AssistantPlan | null;
 }

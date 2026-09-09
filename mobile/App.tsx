@@ -1,7 +1,7 @@
+import { themedStyles } from './src/theme';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import * as Updates from 'expo-updates';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
 import {
@@ -14,6 +14,7 @@ import {
   BodyMetricLog,
   FoodEntry,
   FoodItem,
+  FoodPortion,
   MealPlan,
   MealType,
   NutritionProgram,
@@ -25,6 +26,7 @@ import {
 import {
   EMPTY_STATE,
   loadState,
+  loadPreRestoreRecovery,
   removeActivity,
   removeEntry,
   removePlan,
@@ -54,19 +56,24 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { AccountLockScreen } from './src/screens/AccountLockScreen';
 import { LaunchScreen } from './src/components/LaunchScreen';
 import { AppErrorBoundary } from './src/components/AppErrorBoundary';
-import { activeTheme, AppThemeName, atmosphere, colors, consumeThemeAppearanceReturn, isDarkTheme, saveAppTheme, saveThemeAppearanceReturn } from './src/theme';
+import { activeTheme, AppThemeName, atmosphere, colors, consumeThemeAppearanceReturn, isDarkTheme, saveAppTheme, useAppTheme } from './src/theme';
 import { withDemoData } from './src/logic/demoData';
-import { createPortableBackup, restorePortableBackup } from './src/logic/backup';
+import { previewPortableBackup, prepareBackupRestore } from './src/logic/backup';
+import { exportBackupWithMedia, materializeBackupMedia, retainImage } from './src/services/portableMedia';
 import { QuickLogSheet, PlateItem } from './src/components/QuickLogSheet';
 import { calculateRecipe } from './src/logic/recipes';
 import { currentTime, mealForTime } from './src/logic/time';
 import { estimateActivityCalories } from './src/logic/activityEnergy';
-import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect } from './src/services/healthConnect';
+import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect, reconcileHealthConnectSync } from './src/services/healthConnect';
 import { buildDailySeries } from './src/logic/analytics';
 import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
 import { diagnosticActions, exportAiDiagnostics, recordAiDiagnostic } from './src/logic/diagnostics';
 import { clearRemoteTestTelemetry, flushTestTelemetry, recordTestTelemetry, testingTelemetryEnabled } from './src/logic/testTelemetry';
-import { assistantPlanIssue } from './src/logic/assistantActions';
+import { assistantPlanIssue, assistantIngredientIssue, validAssistantDate, validAssistantTime } from './src/logic/assistantActions';
+import { resolvedServingQuantity } from './src/logic/resolvedPortions';
+import { weeklyChangeForGoal } from './src/logic/goals';
+import { assistantFoodPortion, foodQueryTerms } from './src/logic/assistantExecution';
+import { createDurableStore, mergeStateTransition } from './src/logic/durableStore';
 
 function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -140,7 +147,9 @@ export default function App() {
 }
 
 function FitnessApp() {
-  const [state, setState] = useState<AppState>(EMPTY_STATE);
+  useAppTheme();
+  const [state, setRenderedState] = useState<AppState>(EMPTY_STATE);
+  const [store] = useState(() => createDurableStore(EMPTY_STATE, saveState, setRenderedState));
   const [hydrated, setHydrated] = useState(false);
   const [returnToAppearance] = useState(() => consumeThemeAppearanceReturn());
   const [activeTab, setActiveTab] = useState<TabKey>(() => returnToAppearance ? 'profile' : 'today');
@@ -153,14 +162,29 @@ function FitnessApp() {
   const [appAgentEnabled, setAppAgentEnabled] = useState<boolean | null>(null);
   const [pendingTheme, setPendingTheme] = useState<AppThemeName>(activeTheme);
   const [healthConnect, setHealthConnect] = useState<HealthConnectStatus | null>(null);
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
-  const [assistantPlan, setAssistantPlan] = useState<AssistantPlan | null>(null);
+  const assistantMessages = state.assistantMessages || [];
+  const assistantPlan = state.assistantPlan || null;
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [lockReady, setLockReady] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [startupError, setStartupError] = useState<Error | null>(null);
   const wasBackgrounded = useRef(false);
+  const applyingAssistant = useRef(false);
+  const healthSyncQueue = useRef<Promise<void>>(Promise.resolve());
+  function reportSaveFailure(error: unknown) {
+    const message = error instanceof Error ? error.message : 'The phone could not save this change.';
+    setStatus(`Not saved: ${message}`);
+    recordTestTelemetry('storage_write_failed', { message });
+    Alert.alert('Change not saved', message);
+  }
+  function setState(update: AppState | ((current: AppState) => AppState)) {
+    void store.update(update).catch(reportSaveFailure);
+  }
+  function setAssistantMessages(update: AssistantMessage[] | ((messages: AssistantMessage[]) => AssistantMessage[])) {
+    setState((current) => ({ ...current, assistantMessages: (typeof update === 'function' ? update(current.assistantMessages || []) : update).slice(-80) }));
+  }
+  function setAssistantPlan(plan: AssistantPlan | null) { setState((current) => ({ ...current, assistantPlan: plan })); }
 
   useEffect(() => {
     const errorUtils = (globalThis as typeof globalThis & { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
@@ -177,9 +201,15 @@ function FitnessApp() {
   useEffect(() => {
     let mounted = true;
     recordTestTelemetry('bootstrap_started');
-    void loadState().then((loaded) => {
+    void loadState().then(async (loaded) => {
+      if (loaded.profile && !loaded.goalHistory?.length) {
+        const effectiveFrom = today(loaded.profile.timeZone);
+        const { date: _, ...target } = loaded.goals.find(goal => goal.date === effectiveFrom) || recommendDailyGoal(loaded.profile, effectiveFrom);
+        loaded = { ...loaded, goalHistory: [{ effectiveFrom, ...target }] };
+        await saveState(loaded);
+      }
       if (!mounted) return;
-      setState(loaded);
+      store.hydrate(loaded);
       setDate(today(loaded.profile?.timeZone));
       setHydrated(true);
       recordTestTelemetry('app_loaded', { hasProfile: Boolean(loaded.profile?.onboardingComplete), localSchema: loaded.version });
@@ -206,10 +236,11 @@ function FitnessApp() {
 
   useEffect(() => {
     if (!hydrated) return;
-    void saveState(state);
     const timer = setTimeout(() => recordTestTelemetry('state_snapshot', { snapshot: testingSnapshot(state) }), 800);
     return () => clearTimeout(timer);
   }, [state, hydrated]);
+
+  useEffect(() => { if (hydrated) void refreshHealthConnect(false); }, [hydrated]);
 
   useEffect(() => {
     if (hydrated && activeTab === 'profile') {
@@ -241,8 +272,8 @@ function FitnessApp() {
     const profile = state.profile;
     const baseline = estimateTdee(mifflinStJeor(profile), profile.activityFactor);
     const endDate = today(profile.timeZone);
-    const series = buildDailySeries({ endDate, days: 28, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile });
-    const adaptive = estimateAdaptiveExpenditure(series, state.weights, baseline);
+    const series = buildDailySeries({ endDate, days: 28, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, goalHistory: state.goalHistory, profile });
+    const adaptive = estimateAdaptiveExpenditure(series, state.weights, baseline, { completedFoodDays: state.completedFoodDays, today: endDate });
     if (adaptive.status !== 'updating' || adaptive.confidence < 0.45) return;
     const current = profile.adaptiveTdee || baseline;
     const lastDate = profile.adaptiveTdeeUpdatedAt ? dateFor(new Date(profile.adaptiveTdeeUpdatedAt), profile.timeZone) : undefined;
@@ -250,9 +281,23 @@ function FitnessApp() {
     const next = Math.round(Math.max(current - 100, Math.min(current + 100, adaptive.estimate)));
     if (Math.abs(next - current) < 50) return;
     const updated = { ...profile, adaptiveTdee: next, adaptiveTdeeUpdatedAt: now(), updatedAt: now() };
-    setState((currentState) => currentState.profile?.updatedAt === profile.updatedAt ? setProfile(currentState, updated) : currentState);
-    setStatus(`Your plan checked 14+ days of food and weight data and adjusted maintenance by ${next - current > 0 ? '+' : ''}${next - current} kcal/day. The daily target now follows it.`);
-  }, [hydrated, state.profile, state.entries, state.weights, state.foods, state.activities, state.goals]);
+    void store.update((currentState) => currentState.profile?.updatedAt === profile.updatedAt ? withGoalHistory(setProfile(currentState, updated), updated) : currentState)
+      .then(() => setStatus('Your plan reviewed confirmed complete food days and weigh-ins. Updated targets apply from today.')).catch(reportSaveFailure);
+  }, [hydrated, state.profile, state.entries, state.weights, state.foods, state.activities, state.goals, state.completedFoodDays]);
+
+  function withGoalHistory(value: AppState, profile: UserProfile): AppState {
+    const effectiveFrom = today(profile.timeZone);
+    const { date: _date, ...target } = recommendDailyGoal(profile, effectiveFrom);
+    return { ...upsertGoal(value, { date: effectiveFrom, ...target }), goalHistory: [...(value.goalHistory || []).filter((goal) => goal.effectiveFrom !== effectiveFrom), { effectiveFrom, ...target }].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)) };
+  }
+
+  async function toggleFoodDayComplete() {
+    if (date > today(state.profile?.timeZone)) return;
+    const complete = state.completedFoodDays?.includes(date);
+    const days = new Set(state.completedFoodDays || []);
+    if (complete) days.delete(date); else days.add(date);
+    await commit({ ...state, completedFoodDays: [...days].sort() }, complete ? 'Day reopened. It will not be used for adaptive targets.' : 'Food day marked complete. Only completed past days inform your plan.');
+  }
 
   function changeTab(tab: TabKey) {
     recordTestTelemetry('navigation', { destination: tab });
@@ -261,12 +306,15 @@ function FitnessApp() {
   }
 
   async function commit(nextState: AppState, success: string) {
-    setState(nextState);
-    setStatus(success);
-    recordTestTelemetry('state_committed', { message: success, changes: testingStateDelta(state, nextState) });
+    try {
+      await store.update((current) => mergeStateTransition(state, nextState, current));
+      setStatus(success);
+      recordTestTelemetry('state_committed', { message: success, changes: testingStateDelta(state, nextState) });
+    } catch (error) { reportSaveFailure(error); throw error; }
   }
 
   async function addPlate(items: PlateItem[], eatenAt: string, logDate = date) {
+    if (!items.length || !validAssistantDate(logDate) || !validAssistantTime(eatenAt) || items.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity * item.food.serving.gramsPerUnit > 1_000_000)) throw new Error('Check the food amounts, date and time before logging.');
     const mealType = mealForTime(eatenAt);
     const enteredAt = now();
     let next = state;
@@ -274,7 +322,7 @@ function FitnessApp() {
       const id = makeId('entry');
       const portion = { foodId: item.food.id, quantity: item.quantity, unit: item.food.serving.unit };
       const entry: FoodEntry = { id, date: logDate, eatenAt, mealType, foodId: item.food.id, portion, note: item.note, enteredAt, source: { source: 'manual', confidence: 1 } };
-      next = upsertEntry(next, entry);
+      next = upsertEntry(upsertFood(next, item.food), entry);
     }
     await commit(next, `${items.length} food${items.length === 1 ? '' : 's'} added at ${eatenAt}`);
   }
@@ -284,13 +332,15 @@ function FitnessApp() {
   }
 
   async function addWeight(weightKg: number) {
+    if (!Number.isFinite(weightKg) || weightKg < 20 || weightKg > 500) throw new Error('Enter a weight between 20 and 500 kg.');
     const id = state.weights.find((item) => item.date === date)?.id || makeId('weight');
     const enteredAt = now();
-    const item: BodyMetricLog = { id, date, weightKg, enteredAt };
+    const item: BodyMetricLog = { id, date, weightKg, enteredAt, source: 'manual' };
     await commit(upsertWeight(state, item), 'Weight logged');
   }
 
   async function addActivity(name: string, durationMinutes: number) {
+    if (!name.trim() || !Number.isFinite(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) throw new Error('Choose an activity and a duration from 1 to 1,440 minutes.');
     const id = makeId('activity');
     const createdAt = now();
     const currentWeight = state.weights.filter((item) => item.date <= date).sort((a, b) => b.date.localeCompare(a.date))[0]?.weightKg || state.profile?.bodyWeightKg || 75;
@@ -303,6 +353,8 @@ function FitnessApp() {
     const id = makeId('food');
     const timestamp = now();
     const scale = 100 / values.servingGrams;
+    const issue = assistantIngredientIssue({ name: values.name, quantity: 1, unit: 'serving', gramsPerUnit: values.servingGrams, caloriesPer100g: values.calories * scale, proteinPer100g: values.protein * scale, carbsPer100g: values.carbs * scale, fatPer100g: values.fat * scale, confidence: 1 });
+    if (issue) throw new Error(`Check this food: ${issue}.`);
     const food: FoodItem = { id, name: values.name, brand: values.brand, serving: { unit: 'serving', amount: 1, gramsPerUnit: values.servingGrams }, nutrition: { calories: values.calories * scale, protein: values.protein * scale, carbs: values.carbs * scale, fat: values.fat * scale }, createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 } };
     await commit(upsertFood(state, food), `${food.name} saved to your library`);
     return food;
@@ -311,9 +363,7 @@ function FitnessApp() {
   async function searchFoods(query: string) {
     recordTestTelemetry('food_search_requested', { query: query.slice(0, 120) });
     const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const aliases: Record<string, string[]> = { dal: ['daal', 'dhal', 'lentil'], daal: ['dal', 'dhal', 'lentil'], dhal: ['dal', 'daal', 'lentil'], mash: ['urad'], urad: ['mash'], roti: ['chapati'], chapati: ['roti'], aloo: ['potato'], keema: ['mince', 'minced'] };
-    const ignored = new Set(['a', 'an', 'and', 'the', 'with', 'of', 'ki', 'ka', 'ke', 'kiya', 'plate', 'dish', 'cooked']);
-    const words = [...new Set(normalized.split(/\s+/).filter((word) => word && !ignored.has(word)).flatMap((word) => [word, ...(aliases[word] || [])]))];
+    const words = foodQueryTerms(query);
     const score = (food: FoodItem) => {
       const name = `${food.name} ${food.brand || ''} ${(food.tags || []).join(' ')}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
       const matchedWords = words.filter((word) => name.includes(word)).length;
@@ -327,9 +377,13 @@ function FitnessApp() {
       const name = `${food.name} ${food.brand || ''} ${(food.tags || []).join(' ')}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
       return name.includes(normalized) || words.some((word) => name.includes(word));
     }).sort((a, b) => score(b) - score(a));
+    if (local.length) {
+      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, resultCount: local.length });
+      return local;
+    }
     try {
       const result = await searchHostedFoods(query, 8);
-      setState((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
+      await store.update((current) => result.items.reduce((next, food) => upsertFood(next, food), current));
       const combined = [...local, ...result.items];
       const unique = combined.filter((food, index) => combined.findIndex((candidate) => candidate.id === food.id) === index);
       const sorted = unique.sort((a, b) => score(b) - score(a));
@@ -345,7 +399,7 @@ function FitnessApp() {
 
   async function barcodeFood(code: string) {
     const response = await lookupFoodByBarcode(code);
-    setState((current) => upsertFood(current, response.item));
+    await store.update((current) => upsertFood(current, response.item));
     return response.item;
   }
 
@@ -353,8 +407,14 @@ function FitnessApp() {
     recordAiDiagnostic({ area: 'quick_log', outcome: 'requested', command: phrase });
     try {
       const response = await resolveTranscript(phrase, date, defaultTime, assistantContext());
-      const resolution: AgentResolution = { foods: response.candidates, transcript: response.transcript, quantities: Object.fromEntries((response.suggestions || []).map((suggestion) => [suggestion.foodId, suggestion.quantity])), notes: response.notes, plan: response.plan };
-      setState((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
+      const quantities: Record<string, number> = {};
+      for (const suggestion of response.suggestions || []) {
+        const food = response.candidates.find(item => item.id === suggestion.foodId);
+        if (!food) throw new Error('A proposed food is missing. Please retry the request.');
+        quantities[food.id] = (quantities[food.id] || 0) + resolvedServingQuantity(food, suggestion.quantity, suggestion.unit);
+      }
+      const resolution: AgentResolution = { foods: response.candidates, transcript: response.transcript, quantities, notes: response.notes, plan: response.plan };
+      await store.update((current) => response.candidates.reduce((next, food) => upsertFood(next, food), current));
       recordAiDiagnostic({ area: 'quick_log', outcome: response.plan?.intent === 'clarify' ? 'no_action' : 'plan_ready', command: phrase, reply: response.plan?.summary || response.notes.join(' '), actions: response.plan ? [{ type: response.plan.intent, name: response.plan.dish?.name || response.plan.title, date: response.plan.log.date, time: response.plan.log.eatenAt }] : [] });
       return resolution;
     } catch (error) {
@@ -372,7 +432,11 @@ function FitnessApp() {
     recordAiDiagnostic({ area: 'quick_log', outcome: 'apply_requested', command: resolution.transcript, actions: [{ type: plan.intent, name: plan.dish?.name || plan.title, date: plan.log.date, time: plan.log.eatenAt }] });
     const resolvedById = new Map([...state.foods, ...resolution.foods].map((food) => [food.id, food]));
     if (plan.intent === 'log_foods') {
-      const items = plan.items.map((item) => resolvedById.get(item.foodId)).filter((food): food is FoodItem => Boolean(food)).map((food) => ({ food, quantity: plan.items.find((item) => item.foodId === food.id)?.quantity || food.serving.amount, note: `AI resolved from: ${resolution.transcript}` }));
+      const items = plan.items.map((item) => {
+        const food = resolvedById.get(item.foodId);
+        if (!food) throw new Error('One proposed food is missing. Nothing was logged; please retry.');
+        return { food, quantity: resolvedServingQuantity(food, item.quantity, item.unit), note: `AI resolved from: ${resolution.transcript}` };
+      });
       if (!items.length) {
         recordAiDiagnostic({ area: 'quick_log', outcome: 'failed', command: resolution.transcript, error: 'No reliable foods were matched for the proposed log.' });
         throw new Error('The assistant could not match a reliable food.');
@@ -383,7 +447,11 @@ function FitnessApp() {
       recordAiDiagnostic({ area: 'quick_log', outcome: 'applied', command: resolution.transcript, actions: [{ type: plan.intent, name: plan.title, date: logDate, time: plan.log.eatenAt }], appliedChanges: items.length });
       return;
     }
-    const ingredients = plan.items.filter((item) => resolvedById.has(item.foodId)).map((item) => ({ foodId: item.foodId, quantity: item.quantity, unit: item.unit }));
+    const ingredients = plan.items.map((item) => {
+      const food = resolvedById.get(item.foodId);
+      if (!food) throw new Error('A recipe ingredient is missing. Nothing was saved.');
+      return { foodId: item.foodId, quantity: resolvedServingQuantity(food, item.quantity, item.unit), unit: food.serving.unit };
+    });
     const availableFoods = [...resolvedById.values()];
     const calculation = calculateRecipe(ingredients, availableFoods, plan.dish?.finalWeightGrams);
     if (!ingredients.length || !calculation.finalGrams) {
@@ -413,13 +481,8 @@ function FitnessApp() {
 
   function changeTheme(theme: AppThemeName) {
     if (theme === pendingTheme) return;
-    saveAppTheme(theme);
-    saveThemeAppearanceReturn();
-    setPendingTheme(theme);
-    // Existing StyleSheets capture colors at module-load time. A controlled
-    // reload is the safe way to apply every surface at once; the return marker
-    // reopens Appearance instead of dumping the owner on Today.
-    void Updates.reloadAsync().catch(() => setStatus('Theme saved. Close and reopen Weed Fitness to apply it.'));
+    try { saveAppTheme(theme); setPendingTheme(theme); recordTestTelemetry('theme_changed', { theme }); }
+    catch { Alert.alert('Theme not saved', 'The phone could not store the appearance preference. Please try again.'); }
   }
 
   async function transcribeFood(uri: string) {
@@ -434,23 +497,21 @@ function FitnessApp() {
     }
   }
 
-  async function refreshHealthConnect(requestAccess: boolean) {
+  function refreshHealthConnect(requestAccess: boolean): Promise<void> {
+    const work = healthSyncQueue.current.then(() => performHealthConnectSync(requestAccess));
+    healthSyncQueue.current = work.catch(() => undefined);
+    return work;
+  }
+
+  async function performHealthConnectSync(requestAccess: boolean) {
     recordTestTelemetry('health_connect_sync_started', { requestAccess });
-    const result = await syncHealthConnect(requestAccess);
+    const result = await syncHealthConnect(requestAccess, 30, store.get().profile?.timeZone);
     recordTestTelemetry('health_connect_sync_finished', { available: result.status.available, permissionGranted: result.status.permissionGranted, activityCount: result.activities.length, weightCount: result.weights.length });
     setHealthConnect(result.status);
-    if (result.activities.length || result.weights.length || result.replaceLegacyActivities) setState((current) => {
-      // v0.3 used one generic row per calorie record. Newer builds import
-      // tracker sessions instead, so clear only those legacy imported rows to
-      // prevent a single Strava workout being counted twice.
-      const withoutLegacyHealthRows = result.replaceLegacyActivities ? { ...current, activities: current.activities.filter((activity) => !activity.id.startsWith('health_strava_')) } : current;
-      const withActivities = result.activities.reduce((next, activity) => upsertActivity(next, activity), withoutLegacyHealthRows);
-      return result.weights.reduce((next, weight) => {
-        const existing = next.weights.find((item) => item.date === weight.date);
-        // A deliberate in-app check-in wins over an imported source for that day.
-        return !existing || existing.notes === 'Imported from Health Connect' ? upsertWeight(next, weight) : next;
-      }, withActivities);
-    });
+    if (result.syncWindow) {
+      try { await store.update((current) => reconcileHealthConnectSync(current, result)); }
+      catch (error) { reportSaveFailure(error); return; }
+    }
     if (requestAccess) {
       setStatus(result.status.message);
       Alert.alert('Health Connect', result.status.message);
@@ -460,9 +521,11 @@ function FitnessApp() {
   function assistantContext() {
     const names = new Map(state.foods.map((food) => [food.id, food.name]));
     return {
-      currentDate: date,
+      currentDate: today(state.profile?.timeZone),
+      selectedDiaryDate: date,
+      history: assistantMessages.slice(-6).map(({ role, text }) => ({ role, text: text.slice(0, 900) })),
       currentTime: currentTime(state.profile?.timeZone),
-      profile: state.profile,
+      profile: state.profile ? { ...state.profile, profilePhotoUri: undefined } : undefined,
       goals: state.goals.slice(-30),
       entries: state.entries.slice(-500).map((entry) => ({ id: entry.id, date: entry.date, time: entry.eatenAt, mealType: entry.mealType, foodId: entry.foodId, foodName: names.get(entry.foodId), quantity: entry.portion.quantity, unit: entry.portion.unit })),
       weights: state.weights.slice(-120),
@@ -484,7 +547,7 @@ function FitnessApp() {
       const plan = await planAssistantCommand(command, assistantContext());
       const askedForChange = /\b(log|logged|lock|locked|add|record|delete|remove|change|move|update|edit|save|create|set|weigh|weight|ate|had|drank)\b/i.test(command);
       const issue = plan.actions.length ? assistantPlanIssue(plan, state, date) : null;
-      const noAction = askedForChange && (!plan.actions.length || Boolean(issue));
+      const noAction = Boolean(issue) || (askedForChange && !plan.actions.length);
       const reply = noAction ? `${plan.reply}\n\n${issue ? 'That plan was incomplete, so I did not enable Apply and nothing changed.' : 'No change is ready to apply yet.'} Please try again with the food, amount, and time.` : plan.reply;
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: reply, createdAt: now() }]);
       setAssistantPlan(!noAction && plan.actions.length ? plan : null);
@@ -499,7 +562,8 @@ function FitnessApp() {
   }
 
   async function executeAssistantPlan() {
-    if (!assistantPlan?.actions.length) return;
+    if (!assistantPlan?.actions.length || applyingAssistant.current) return;
+    applyingAssistant.current = true;
     setAssistantBusy(true);
     recordAiDiagnostic({ area: 'assistant', outcome: 'apply_requested', actions: diagnosticActions(assistantPlan) });
     try {
@@ -517,37 +581,38 @@ function FitnessApp() {
         next = upsertFood(next, food);
         return food;
       };
-      const addEntry = (food: FoodItem, quantity: number, entryDate: string, eatenAt: string, note: string) => {
+      const addEntry = (food: FoodItem, quantity: number, entryDate: string, eatenAt: string, note: string, requestedPortion?: FoodPortion) => {
         const id = makeId('entry'); const mealType = mealForTime(eatenAt);
-        const portion = { foodId: food.id, quantity, unit: food.serving.unit };
+        const portion = requestedPortion || { foodId: food.id, quantity, unit: food.serving.unit };
         next = upsertEntry(next, { id, date: entryDate, eatenAt, mealType, foodId: food.id, portion, note, enteredAt: timestamp, source: { source: 'llm', confidence: 1 } });
         appliedChanges += 1;
         diaryDate = entryDate;
       };
       for (const action of assistantPlan.actions) {
         const actionDate = action.date || date; const actionTime = action.time || currentTime(next.profile?.timeZone);
-        if (action.type === 'save_food') { action.ingredients.forEach(foodFor); appliedChanges += action.ingredients.length; }
-        else if (action.type === 'log_foods') action.ingredients.forEach((ingredient) => { const food = foodFor(ingredient); addEntry(food, ingredient.quantity, actionDate, actionTime, 'Logged by the AI assistant.'); });
+        if (action.type === 'save_food') { const before = next.foods.length; action.ingredients.forEach(foodFor); appliedChanges += next.foods.length - before; }
+        else if (action.type === 'log_foods') action.ingredients.forEach((ingredient) => { const food = foodFor(ingredient); addEntry(food, ingredient.quantity, actionDate, actionTime, 'Logged by the AI assistant.', assistantFoodPortion(food, ingredient)); });
         else if (action.type === 'create_recipe' || action.type === 'create_recipe_and_log') {
-          const recipeIngredients = action.ingredients.map((ingredient) => { const food = foodFor(ingredient); return { foodId: food.id, quantity: ingredient.quantity, unit: ingredient.unit }; });
+          const recipeIngredients = action.ingredients.map((ingredient) => assistantFoodPortion(foodFor(ingredient), ingredient));
           const calculation = calculateRecipe(recipeIngredients, next.foods);
           if (!calculation.finalGrams) throw new Error('This recipe plan has no usable ingredient weight. Nothing was changed.');
           const foodId = makeId('recipe_food'); const recipeId = makeId('recipe'); const servings = Math.max(action.servings || 1, 1);
           const dish: FoodItem = { id: foodId, name: action.name || 'AI dish', serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / servings }, nutrition: calculation.per100g, tags: ['recipe', 'custom-dish', 'ai-created'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'llm', confidence: action.confidence } };
-          const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, reviewStatus: 'ai_estimated', sourceName: 'Groq ingredient estimate', createdAt: timestamp, updatedAt: timestamp };
+          const recipe: Recipe = { id: recipeId, name: dish.name, servings, finalWeightGrams: calculation.finalGrams, ingredients: recipeIngredients, foodId, sourceDescription: action.summary, reviewStatus: 'ai_estimated', sourceName: action.sourceName || 'Groq ingredient estimate', sourceUrl: action.sourceUrl, sourceLicense: action.sourceLicense, createdAt: timestamp, updatedAt: timestamp };
           next = upsertRecipe(upsertFood(next, dish), recipe);
           appliedChanges += 1;
           if (action.type === 'create_recipe_and_log') addEntry(dish, action.quantity || 1, actionDate, actionTime, 'Created and logged by the AI assistant.');
         } else if (action.type === 'log_weight' && action.value) {
           const id = next.weights.find((item) => item.date === actionDate)?.id || makeId('weight');
-          next = upsertWeight(next, { id, date: actionDate, weightKg: action.value, enteredAt: timestamp }); appliedChanges += 1;
+          next = upsertWeight(next, { id, date: actionDate, weightKg: action.value, enteredAt: timestamp, source: 'manual' }); appliedChanges += 1;
         } else if (action.type === 'log_activity' && action.name && action.durationMinutes) {
           const id = makeId('activity'); const calories = action.calories ?? estimateActivityCalories(action.name, action.durationMinutes, next.profile?.bodyWeightKg || 75).calories;
           next = upsertActivity(next, { id, date: actionDate, name: action.name, type: action.name.toLowerCase(), durationMinutes: action.durationMinutes, caloriesEstimated: calories, source: 'manual', createdAt: timestamp }); appliedChanges += 1;
         } else if (action.type === 'change_entry_time' && action.targetId) {
           const entry = next.entries.find((item) => item.id === action.targetId); if (!entry) continue;
           const entryDate = action.date || entry.date;
-          const updated = { ...entry, date: entryDate, eatenAt: actionTime, mealType: mealForTime(actionTime) };
+          const entryTime = action.time || entry.eatenAt || actionTime;
+          const updated = { ...entry, date: entryDate, eatenAt: entryTime, mealType: mealForTime(entryTime) };
           diaryDate = entryDate;
           next = upsertEntry(next, updated); appliedChanges += 1;
         } else if (action.type === 'delete_entry' && action.targetId) { const entry = next.entries.find((item) => item.id === action.targetId); if (!entry) continue; diaryDate = entry.date; next = removeEntry(next, action.targetId); appliedChanges += 1; }
@@ -557,7 +622,8 @@ function FitnessApp() {
           const goal = { date: actionDate, calories: action.calories, protein: action.protein, carbs: action.carbs, fat: action.fat }; next = upsertGoal(next, goal); appliedChanges += 1;
         } else if (action.type === 'update_profile' && next.profile) {
           const current = next.profile; const input: ProfileInput = { displayName: action.displayName ?? current.displayName, profilePhotoUri: current.profilePhotoUri, sex: current.sex, ageYears: current.ageYears, heightCm: current.heightCm, bodyWeightKg: action.value ?? current.bodyWeightKg, targetWeightKg: action.targetWeightKg ?? current.targetWeightKg, activityFactor: action.activityFactor ?? current.activityFactor, weeklyWeightChangeKg: current.weeklyWeightChangeKg, goalMode: action.goalMode ?? current.goalMode, goalIntensity: action.goalIntensity ?? current.goalIntensity, targetDate: action.targetDate ?? current.targetDate, onboardingComplete: true, preferredHeightUnit: current.preferredHeightUnit, preferredWeightUnit: current.preferredWeightUnit, timeZone: current.timeZone, adaptiveTdee: current.adaptiveTdee, adaptiveTdeeUpdatedAt: current.adaptiveTdeeUpdatedAt, dietStyle: current.dietStyle, preferredCuisine: current.preferredCuisine, mealsPerDay: current.mealsPerDay, excludedFoods: current.excludedFoods };
-          next = setProfile(next, { ...current, ...input, updatedAt: timestamp }); appliedChanges += 1;
+          const updatedProfile = { ...current, ...input, weeklyWeightChangeKg: weeklyChangeForGoal(input), updatedAt: timestamp };
+          next = withGoalHistory(setProfile(next, updatedProfile), updatedProfile); appliedChanges += 1;
         } else if (action.type === 'create_plan_from_day' && action.name) {
           const built = buildPlanFromDay({ id: makeId('plan'), name: action.name, description: action.summary, entries: next.entries.filter((entry) => entry.date === actionDate), now: timestamp, makeItemId: () => makeId('plan_item') }); next = upsertPlan(next, built.plan); appliedChanges += 1;
         } else if (action.type === 'apply_plan' && action.targetId) {
@@ -568,25 +634,24 @@ function FitnessApp() {
         else if (action.type === 'navigate' && action.destination) destination = action.destination;
       }
       if (!appliedChanges && !destination) throw new Error('Nothing was applied. Your diary has not changed; please resend the command so the assistant can prepare a valid action.');
-      if (appliedChanges) await commit(next, `Assistant applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'}`);
+      const resultMessage = appliedChanges ? `Applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'} successfully.` : 'Opened the requested screen.';
+      next = { ...next, assistantPlan: null, assistantMessages: [...assistantMessages, { id: makeId('message'), role: 'assistant', text: resultMessage, createdAt: now() }].slice(-80) as AssistantMessage[] };
+      await commit(next, resultMessage);
       if (diaryDate) { setDate(diaryDate); changeTab('today'); }
       else if (destination) changeTab(destination);
-      const resultMessage = appliedChanges ? `Applied ${appliedChanges} change${appliedChanges === 1 ? '' : 's'} successfully.` : 'Opened the requested screen.';
-      setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: resultMessage, createdAt: now() }]);
       recordAiDiagnostic({ area: 'assistant', outcome: 'applied', actions: diagnosticActions(assistantPlan), appliedChanges });
-      setAssistantPlan(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'I could not apply that plan.';
       setAssistantMessages((current) => [...current, { id: makeId('message'), role: 'assistant', text: message, createdAt: now() }]);
       recordAiDiagnostic({ area: 'assistant', outcome: 'failed', actions: diagnosticActions(assistantPlan), error: message, errorCode: errorCode(error) });
-    } finally { setAssistantBusy(false); }
+    } finally { applyingAssistant.current = false; setAssistantBusy(false); }
   }
 
   async function saveProfileInput(input: ProfileInput) {
     const timestamp = now();
     const profile: UserProfile = { ...state.profile, ...input, id: state.profile?.id || makeId('profile'), createdAt: state.profile?.createdAt || timestamp, updatedAt: timestamp };
-    const goal = recommendDailyGoal(profile, date);
-    await commit(upsertGoal(setProfile(state, profile), goal), `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
+    const goal = recommendDailyGoal(profile, today(profile.timeZone));
+    await commit(withGoalHistory(upsertGoal(setProfile(state, profile), goal), profile), `Targets updated to ${goal.calories} kcal and ${goal.protein}g protein`);
     if (input.timeZone !== state.profile?.timeZone) setDate(today(input.timeZone));
     await personalizeProgram(profile);
   }
@@ -594,7 +659,7 @@ function FitnessApp() {
   async function saveProfilePhoto(profilePhotoUri?: string) {
     if (!state.profile) return;
     const timestamp = now();
-    const profile = { ...state.profile, profilePhotoUri, updatedAt: timestamp };
+    const profile = { ...state.profile, profilePhotoUri: await retainImage(profilePhotoUri), updatedAt: timestamp };
     await commit(setProfile(state, profile), profilePhotoUri ? 'Profile photo updated' : 'Profile photo removed');
   }
 
@@ -623,8 +688,8 @@ function FitnessApp() {
     const timestamp = now();
     const profile: UserProfile = { ...input, onboardingComplete: true, id: makeId('profile'), createdAt: timestamp, updatedAt: timestamp };
     const base = includeDemo ? withDemoData(state, date, profile) : state;
-    const goal = recommendDailyGoal(profile, date);
-    await commit(upsertGoal(setProfile(base, profile), goal), includeDemo ? 'Profile ready with 60 days of demo history' : 'Profile and targets ready');
+    const goal = recommendDailyGoal(profile, today(profile.timeZone));
+    await commit(withGoalHistory(upsertGoal(setProfile(base, profile), goal), profile), includeDemo ? 'Profile ready with 60 days of demo history' : 'Profile and targets ready');
     await personalizeProgram(profile);
   }
 
@@ -632,29 +697,43 @@ function FitnessApp() {
     try {
       const response = await getGoalRecommendation(profile);
       const program: NutritionProgram = { createdAt: now(), profileUpdatedAt: profile.updatedAt, ...response.review };
-      setState((current) => ({ ...current, nutritionProgram: program }));
+      await store.update((current) => current.profile?.updatedAt === profile.updatedAt ? ({ ...current, nutritionProgram: program }) : current);
       setStatus(response.review.aiGenerated ? 'Personalized food structure created with locked local targets.' : 'Safe local food structure created; AI personalization was unavailable.');
     } catch {
       setStatus('Profile saved. Your local targets remain active while the hosted AI is unavailable.');
     }
   }
 
-  function loadDemo() {
-    setState((current) => withDemoData(current, date, current.profile));
-    setStatus('Demo history loaded locally. Trends now show 60 days of food, weight, and activity data.');
+  async function loadDemo() {
+    try { await store.update((current) => withDemoData(current, date, current.profile)); setStatus('Demo history loaded locally. Demo data is not marked complete for adaptive learning.'); }
+    catch (error) { reportSaveFailure(error); }
   }
 
-  function importBackup(text: string) {
+  async function importBackup(text: string) {
     try {
-      setState(restorePortableBackup(text));
+      previewPortableBackup(text);
+      const before = store.get();
+      const restored = await materializeBackupMedia(await prepareBackupRestore(text, before));
+      await store.update((current) => { if (current !== before) throw new Error('Your diary changed during restore preparation. Try the import again.'); return restored; });
+      setDate(today(restored.profile?.timeZone));
       setStatus('Portable backup restored successfully.');
-    } catch {
-      Alert.alert('Backup not recognized', 'Paste a complete Weed Fitness JSON backup or legacy export.');
+    } catch (error) {
+      Alert.alert('Backup not restored', error instanceof Error ? error.message : 'Choose a complete Weed Fitness backup.');
     }
+  }
+
+  async function undoBackupRestore() {
+    try {
+      const recovery = await loadPreRestoreRecovery();
+      if (!recovery) return Alert.alert('No recovery copy', 'A recovery copy is made before you import a backup.');
+      await store.update(recovery);
+      setStatus('The diary from before the last restore has been recovered.');
+    } catch (error) { reportSaveFailure(error); }
   }
 
   async function updateEntry(entry: FoodEntry) {
     const eatenAt = entry.eatenAt || '12:00';
+    if (!validAssistantDate(entry.date) || !validAssistantTime(eatenAt) || !Number.isFinite(entry.portion.quantity) || entry.portion.quantity <= 0) throw new Error('Check the date, time and positive amount.');
     const updated = { ...entry, eatenAt, mealType: mealForTime(eatenAt) };
     await commit(upsertEntry(state, updated), `Updated ${state.foods.find((food) => food.id === entry.foodId)?.name || 'food'} in your diary`);
   }
@@ -674,7 +753,7 @@ function FitnessApp() {
     const recipeId = makeId('recipe');
     const food: FoodItem = {
       id: foodId, name: input.name, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g,
-      emoji: input.emoji, imageUri: input.imageUri, tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
+      emoji: input.emoji, imageUri: await retainImage(input.imageUri), tags: ['recipe', 'custom-dish'], createdAt: timestamp, updatedAt: timestamp, source: { source: 'manual', confidence: 1 }
     };
     const recipe: Recipe = { id: recipeId, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, foodId, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, createdAt: timestamp, updatedAt: timestamp };
     await commit(upsertRecipe(upsertFood(state, food), recipe), `${food.name} saved as a reusable dish`);
@@ -682,7 +761,7 @@ function FitnessApp() {
   }
 
   async function updateFood(food: FoodItem) {
-    await commit(upsertFood(state, food), `${food.name} updated in your library`);
+    await commit(upsertFood(state, { ...food, imageUri: await retainImage(food.imageUri) }), `${food.name} updated for future logs. Past entries are unchanged.`);
   }
 
   async function updateRecipe(recipeId: string, input: RecipeInput) {
@@ -693,7 +772,7 @@ function FitnessApp() {
     const calculation = calculateRecipe(input.ingredients, state.foods, input.finalWeightGrams);
     if (!calculation.finalGrams || !input.servings) throw new Error('invalid_recipe');
     const timestamp = now();
-    const food: FoodItem = { ...previousFood, name: input.name, emoji: input.emoji, imageUri: input.imageUri, serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g, updatedAt: timestamp };
+    const food: FoodItem = { ...previousFood, name: input.name, emoji: input.emoji, imageUri: await retainImage(input.imageUri), serving: { unit: 'serving', amount: 1, gramsPerUnit: calculation.finalGrams / input.servings }, nutrition: calculation.per100g, updatedAt: timestamp };
     const recipe: Recipe = { ...previousRecipe, name: input.name, servings: input.servings, finalWeightGrams: calculation.finalGrams, ingredients: input.ingredients, sourceDescription: input.sourceDescription, reviewStatus: 'manual', sourceName: 'Personal cookbook', reviewedAt: timestamp, updatedAt: timestamp };
     await commit(upsertRecipe(upsertFood(state, food), recipe), `${food.name} recipe updated`);
     return food;
@@ -702,7 +781,7 @@ function FitnessApp() {
   function applyPlan(plan: MealPlan) {
     Alert.alert('Add this food plan?', `${plan.items.length} foods will be added to ${date}. Existing diary entries will remain.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Add plan', onPress: () => void applyPlanConfirmed(plan) }
+      { text: 'Add plan', onPress: () => { void applyPlanConfirmed(plan).catch(() => undefined); } }
     ]);
   }
 
@@ -722,19 +801,19 @@ function FitnessApp() {
   }
 
   function deleteEntry(id: string) {
-    confirmDelete('food entry', () => void commit(removeEntry(state, id), 'Food entry deleted'));
+    confirmDelete('food entry', () => { void commit(removeEntry(state, id), 'Food entry deleted').catch(() => undefined); });
   }
 
   function deleteWeight(id: string) {
-    confirmDelete('weight log', () => void commit(removeWeight(state, id), 'Weight log deleted'));
+    confirmDelete('weight log', () => { void commit(removeWeight(state, id), 'Weight log deleted').catch(() => undefined); });
   }
 
   function deleteActivity(id: string) {
-    confirmDelete('activity', () => void commit(removeActivity(state, id), 'Activity deleted'));
+    confirmDelete('activity', () => { void commit(removeActivity(state, id), 'Activity deleted').catch(() => undefined); });
   }
 
   function deletePlan(id: string) {
-    confirmDelete('food plan', () => void commit(removePlan(state, id), 'Food plan deleted'));
+    confirmDelete('food plan', () => { void commit(removePlan(state, id), 'Food plan deleted').catch(() => undefined); });
   }
 
   async function refreshIntegrationStatus() {
@@ -766,12 +845,12 @@ function FitnessApp() {
   if (!state.profile?.onboardingComplete) return <SafeAreaView style={styles.root}><StatusBar barStyle={isDarkTheme ? 'light-content' : 'dark-content'} backgroundColor={colors.paper} /><OnboardingScreen date={date} onComplete={completeOnboarding} /></SafeAreaView>;
 
   let screen: React.ReactNode;
-  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} timeZone={state.profile?.timeZone} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onUpdateEntry={updateEntry} onDeleteEntry={deleteEntry} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} />;
+  if (activeTab === 'today') screen = <TodayScreen state={state} date={date} status={status} timeZone={state.profile?.timeZone} onDateChange={changeDate} onQuickAddAt={openQuickLog} onAddWeight={addWeight} onAddActivity={addActivity} onUpdateEntry={updateEntry} onDeleteEntry={deleteEntry} onDeleteEntryConfirmed={(id) => commit(removeEntry(state, id), 'Food entry deleted')} onDeleteWeight={deleteWeight} onDeleteActivity={deleteActivity} onToggleComplete={() => { void toggleFoodDayComplete().catch(() => undefined); }} />;
   else if (activeTab === 'plans') screen = <PlansScreen state={state} date={date} onEditProfile={() => changeTab('profile')} onCreate={createPlan} onApply={applyPlan} onDelete={deletePlan} />;
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
-  else if (activeTab === 'assistant') screen = <AssistantScreen messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
+  else if (activeTab === 'assistant') screen = <AssistantScreen state={state} selectedDate={date} messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} onUpdateFood={updateFood} onUpdateRecipe={updateRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => createPortableBackup(state)} onExportDiagnostics={exportAiDiagnostics} testingTelemetryEnabled={testingTelemetryEnabled()} onClearTestTelemetry={clearRemoteTestTelemetry} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => exportBackupWithMedia(store.get())} onUndoRestore={undoBackupRestore} onBeforeRestart={() => store.update((current) => current)} onExportDiagnostics={exportAiDiagnostics} testingTelemetryEnabled={testingTelemetryEnabled()} onClearTestTelemetry={clearRemoteTestTelemetry} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -785,9 +864,9 @@ function FitnessApp() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   root: { flex: 1, backgroundColor: colors.paper },
   content: { flex: 1 },
   atmosphereOne: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: atmosphere.one, opacity: 0.38, top: -150, right: -90 },
   atmosphereTwo: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: atmosphere.two, opacity: 0.34, bottom: 100, left: -150 }
-});
+}));

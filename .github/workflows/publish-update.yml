@@ -3,6 +3,10 @@ name: Publish app update
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: Tested release tag to publish (must exist)
+        required: true
+        type: string
       channel:
         description: Update channel to publish to
         required: true
@@ -29,6 +33,8 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -44,4 +50,7 @@ jobs:
           packager: npm
           token: ${{ secrets.EXPO_TOKEN }}
       - name: Publish compatible update
-        run: eas update --channel "${{ inputs.channel }}" --environment "${{ inputs.channel }}" --message "${{ inputs.message }}" --non-interactive
+        env:
+          UPDATE_CHANNEL: ${{ inputs.channel }}
+          UPDATE_MESSAGE: ${{ inputs.message }}
+        run: eas update --platform android --channel "$UPDATE_CHANNEL" --environment "$UPDATE_CHANNEL" --message "$UPDATE_MESSAGE" --non-interactive

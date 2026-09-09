@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text, View } from 'react-native';
@@ -38,7 +39,7 @@ export function AccountLockScreen({ onUnlock }: { onUnlock: (pin: string) => Pro
   </View>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   page: { flex: 1, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
   mark: { width: 66, height: 66, borderRadius: 33, backgroundColor: colors.pine, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
   title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'center' },
@@ -46,4 +47,4 @@ const styles = StyleSheet.create({
   form: { width: '100%', maxWidth: 360, marginTop: 26 },
   error: { color: colors.danger, fontSize: 11, lineHeight: 16, marginBottom: 8 },
   hint: { color: colors.faint, fontSize: 10, lineHeight: 15, textAlign: 'center', marginTop: 18, maxWidth: 310 }
-});
+}));

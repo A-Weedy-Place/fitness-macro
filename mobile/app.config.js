@@ -12,9 +12,10 @@ export default {
       checkAutomatically: 'ON_LOAD',
       fallbackToCacheTimeout: 0
     },
-    runtimeVersion: {
-      policy: 'appVersion'
-    },
+    // Native dependencies/config are unchanged from APK 0.2.2. Keep this ABI
+    // explicit so versioned JavaScript fixes reach the installed preview APK.
+    // Any future native dependency/permission/plugin change MUST bump it.
+    runtimeVersion: '0.2.2',
     extra: {
       eas: {
         projectId: '714cf37d-459a-4408-b025-1334f0bfc779'

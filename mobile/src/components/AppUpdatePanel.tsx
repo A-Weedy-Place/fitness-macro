@@ -1,9 +1,11 @@
+import { themedStyles } from '../theme';
 import React, { useState } from 'react';
 import * as Application from 'expo-application';
 import * as Updates from 'expo-updates';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
 import { Button, Card } from './ui';
+import { version as codeVersion } from '../../package.json';
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message
@@ -11,7 +13,7 @@ function errorMessage(error: unknown) {
     : 'The update service could not be reached. Check your connection and try again.';
 }
 
-export function AppUpdatePanel() {
+export function AppUpdatePanel({ beforeRestart }: { beforeRestart?: () => Promise<void> }) {
   const updateState = Updates.useUpdates();
   const [message, setMessage] = useState('Automatic update checks run when Weed Fitness starts.');
   const [working, setWorking] = useState(false);
@@ -25,7 +27,7 @@ export function AppUpdatePanel() {
 
   let status = message;
   if (!canCheck) status = 'Update checks are available in installed preview and production builds, not Expo Go.';
-  if (updateState.isChecking) status = 'Checking the production channel for a compatible update…';
+  if (updateState.isChecking) status = `Checking the ${channel} channel for a compatible update…`;
   if (updateState.isDownloading) status = `Downloading the update${progress == null ? '…' : ` · ${progress}%`}`;
   if (updateState.checkError) status = errorMessage(updateState.checkError);
   if (updateState.downloadError) status = errorMessage(updateState.downloadError);
@@ -72,6 +74,8 @@ export function AppUpdatePanel() {
   async function applyUpdate() {
     try {
       setWorking(true);
+      setMessage('Waiting for pending changes to finish saving…');
+      await beforeRestart?.();
       setMessage('Restarting into the new update…');
       await Updates.reloadAsync();
     } catch (error) {
@@ -84,7 +88,8 @@ export function AppUpdatePanel() {
     <Card>
       <View style={styles.versionRow}>
         <View style={styles.versionCopy}>
-          <Text style={styles.version}>Weed Fitness v{version}{build ? ` (${build})` : ''}</Text>
+          <Text style={styles.version}>Weed Fitness v{codeVersion}</Text>
+          <Text style={styles.meta}>APK {version}{build ? ` (${build})` : ''} · runtime {Updates.runtimeVersion || 'development'}</Text>
           <Text style={styles.meta}>CHANNEL · {channel.toUpperCase()}</Text>
         </View>
         <View style={[styles.statusDot, updateState.isUpdatePending && styles.statusDotReady]} />
@@ -112,7 +117,7 @@ export function AppUpdatePanel() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   versionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   versionCopy: { flex: 1 },
   version: { color: colors.ink, fontSize: 15, fontWeight: '900' },
@@ -122,4 +127,4 @@ const styles = StyleSheet.create({
   detail: { color: colors.muted, fontSize: 11, lineHeight: 17, marginBottom: 5 },
   checked: { color: colors.faint, fontSize: 9, marginBottom: 12 },
   note: { color: colors.faint, fontSize: 9, lineHeight: 14, marginTop: 10 }
-});
+}));

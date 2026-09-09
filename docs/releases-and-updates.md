@@ -1,41 +1,26 @@
 # Releases and in-app updates
 
-Weed Fitness has two delivery paths with different safety boundaries.
+Required workflow: issue → codex branch → tested PR → CI → merge → Release Please version/changelog PR → merge/tag/GitHub Release → publish the exact tag. No direct feature commits to main. Update context.md and the Obsidian mirror each stage.
 
-## Compatible in-app update
+## Compatible preview update
 
-Use this for JavaScript, TypeScript, and asset changes that do not alter the native runtime.
+Use for JavaScript/TypeScript/assets without native changes. Current installed owner APK: v0.2.2, native runtime `0.2.2`, channel `preview`.
 
-1. Merge a tested pull request.
-2. Open **Actions → Publish app update → Run workflow**.
-3. Publish to `preview` first and test it in a preview build.
-4. Run the workflow again for `production` from the same commit.
-5. Installed production builds check automatically at startup. The owner can also use **You → Updates → Check for updates** and restart immediately after download.
+1. Follow the tracked workflow and create the version tag.
+2. Run Actions → Publish app update, enter that exact tag, choose preview, add a short description.
+3. Verify successful Android update publication, runtime0.2.2 and channel mapping. Record the group and release evidence.
+4. Owner opens You → Updates → Check for updates → downloads → restarts when ready. The JavaScript version advances while the installed APK version remains0.2.2. Themes themselves never need a restart.
 
-EAS only serves updates whose runtime version matches the installed build. The runtime is tied to the public app version, so an incompatible update cannot intentionally cross release boundaries.
+The repository can remain private: EAS hosts the update separately, without putting GitHub credentials in the app. Do not publish private owner testing to production by default.
 
-## New APK release
+runtimeVersion is explicit, independent of the patch release version. It remains0.2.2 only while native dependencies/configuration stay compatible. Any native dependency, plugin, permission, Expo SDK or native configuration change MUST bump it and ship a replacement APK. Do not force incompatible code into an old runtime.
 
-Use this after changing native dependencies, plugins, permissions, native configuration, or the Expo SDK.
+## New APK
 
-1. Merge normal PRs using Conventional Commit titles.
-2. Release Please maintains a release PR with the next version and changelog.
-3. Merge that release PR. It creates the version tag and GitHub Release.
-4. Open **Actions → Build release APK**, enter the new tag, and choose `preview` for private owner testing or `production` for an eventual public-ready build.
-5. The workflow checks out the exact tag, runs CI, creates a signed APK with the chosen EAS profile, and attaches a profile-labelled file to the GitHub Release. Preview builds include the temporary automatic test telemetry; production builds do not.
+After a native change and versioned release, run Actions → Build release APK on the exact tag with preview for owner testing. The workflow checks, builds, and attaches the signed profile-labelled APK to GitHub Releases. EAS increments Android versionCode; install over the existing app to preserve data. Never uninstall as an update instruction or silently replace a tagged artifact. Do not label an old APK as the current release.
 
-The first tracked release is `v0.1.0`. EAS remotely increments Android's internal `versionCode`; the human-facing version remains controlled by the release PR.
+## Credentials and rollback
 
-## Required delivery sequence
+Both delivery workflows use GitHub Actions secret EXPO_TOKEN. Keep it out of chat/source/logs; revoke and replace any exposed token before relying on it. The EAS preview environment supplies the separate extractable EXPO_PUBLIC_RELAY_ACCESS_TOKEN and temporary telemetry flag. Proper account/device authentication is required before public distribution.
 
-Use this sequence for every owner test stage: GitHub issue → `codex/issue-<number>-...` branch → tested pull request that closes the issue → merge → Release Please version/changelog pull request → merge/tag/GitHub Release → release workflow attaches the signed APK. Keep the direct EAS link only as a temporary convenience; the GitHub Release is the permanent download record.
-
-## Required repository secret
-
-Both delivery workflows require an Expo personal access token stored as the repository GitHub Actions secret `EXPO_TOKEN`. Never place it in source code, an issue, a PR, or a workflow file.
-
-The relay access token remains an EAS environment variable. The `preview` and `production` EAS environments must each contain `EXPO_PUBLIC_RELAY_ACCESS_TOKEN` until the relay is replaced with real account/device authentication.
-
-## Rollback
-
-If a compatible update is broken, use EAS Update rollback for its channel. If a native release is broken, fix it in a PR, create a new patch release, and publish a new APK; never replace an existing tagged artifact silently.
+Rollback a bad compatible update through its EAS channel. Test schema migrations forward/backward before rollback: previous JavaScript may not understand newly written state. A native defect requires a new tagged APK. Keep recovery data; never erase the diary to make an update appear successful.

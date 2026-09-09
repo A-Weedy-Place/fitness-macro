@@ -47,3 +47,4 @@ jobs:
           cache-dependency-path: relay/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test

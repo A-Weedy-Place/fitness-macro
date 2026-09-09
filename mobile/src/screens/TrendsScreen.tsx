@@ -1,3 +1,4 @@
+import { themedStyles } from '../theme';
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AppState } from '../types';
@@ -16,7 +17,7 @@ export function TrendsScreen({ state, endDate }: { state: AppState; endDate: str
   const [range, setRange] = useState<Range>('30d');
   const earliest = [...state.entries.map((item) => item.date), ...state.weights.map((item) => item.date), ...state.activities.map((item) => item.date)].sort()[0];
   const days = range === '7d' ? 7 : range === '30d' ? 30 : range === '1y' ? 365 : earliest ? dateDistance(earliest, endDate) : 30;
-  const series = useMemo(() => buildDailySeries({ endDate, days, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, profile: state.profile }), [state, endDate, days]);
+  const series = useMemo(() => buildDailySeries({ endDate, days, entries: state.entries, foods: state.foods, activities: state.activities, goals: state.goals, goalHistory: state.goalHistory, profile: state.profile }), [state, endDate, days]);
   const insights = useMemo(() => calculateInsights(series, state.weights, endDate), [series, state.weights, endDate]);
   const weights = useMemo(() => buildWeightSeries(state.weights, endDate, days), [state.weights, endDate, days]);
   const macros = useMemo(() => macroCalorieSplit(series.filter((point) => point.logged)), [series]);
@@ -55,7 +56,7 @@ export function TrendsScreen({ state, endDate }: { state: AppState; endDate: str
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   metrics: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 14 },
   legend: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, marginLeft: 7 },
@@ -66,4 +67,4 @@ const styles = StyleSheet.create({
   mealTrack: { flex: 1, height: 10, backgroundColor: colors.paperDeep, borderRadius: 5, overflow: 'hidden' },
   mealFill: { height: 10, backgroundColor: colors.coral, borderRadius: 5 },
   mealValue: { width: 48, textAlign: 'right', color: colors.ink, fontWeight: '800', fontSize: 11 }
-});
+}));
