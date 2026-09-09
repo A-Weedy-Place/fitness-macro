@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.3...v0.2.4) (2026-09-09)
+
+- Android Back closes settings/cookbook subviews before returning to Today; selected foods require confirmation before discard.
+- Fixed Charcoal text/icon contrast without changing Warm Harvest or restarting themes.
+- Food selection has a fixed Review & edit control, selection feedback and Undo, with durable-save and double-submit protection.
+- Faster delivery: one versioned fix PR and CI gate per batch; optional release-bot workflow rather than a second mandatory PR.
+
 ## [0.2.3](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.2...v0.2.3) (2026-09-09)
 
 

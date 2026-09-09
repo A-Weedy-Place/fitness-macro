@@ -57,7 +57,16 @@ function readTheme(): AppThemeName {
 
 export let activeTheme = readTheme();
 const palettes = { warm, neutral, charcoal, ocean, orchid };
-export let colors = palettes[activeTheme];
+function paletteColors() {
+  const palette = palettes[activeTheme];
+  return { ...palette,
+    // Foregrounds are distinct from decorative/button fills, especially in Charcoal.
+    actionText: activeTheme === 'charcoal' ? palette.ink : palette.pine,
+    onStrong: activeTheme === 'charcoal' ? palette.paper : palette.white,
+    onPrimary: activeTheme === 'charcoal' ? palette.paper : palette.white
+  };
+}
+export let colors = paletteColors();
 export let isDarkTheme = activeTheme === 'charcoal';
 function themeAtmosphere() { return activeTheme === 'charcoal'
   ? { one: '#26372E', two: '#40261F' }
@@ -84,7 +93,7 @@ export function saveAppTheme(theme: AppThemeName): void {
   if (!themeFile.exists) themeFile.create({ intermediates: true });
   themeFile.write(theme);
   activeTheme = theme;
-  colors = palettes[theme];
+  colors = paletteColors();
   isDarkTheme = theme === 'charcoal';
   atmosphere = themeAtmosphere();
   listeners.forEach((listener) => listener());

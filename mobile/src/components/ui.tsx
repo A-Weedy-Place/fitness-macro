@@ -142,7 +142,7 @@ export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (ta
         const selected = tab.key === active;
         return (
           <Pressable key={tab.key} onPress={() => onChange(tab.key)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={tab.label}>
-            <View style={[styles.tabMark, selected && styles.tabMarkSelected]}><Ionicons name={tab.icon} size={18} color={selected ? colors.white : colors.muted} /></View>
+            <View style={[styles.tabMark, selected && styles.tabMarkSelected]}><Ionicons name={tab.icon} size={18} color={selected ? colors.onStrong : colors.muted} /></View>
             <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>{tab.label}</Text>
           </Pressable>
         );
@@ -171,8 +171,8 @@ const styles = themedStyles(() => ({
   button_danger: { backgroundColor: colors.coralSoft },
   buttonPressed: { opacity: 0.55 },
   buttonLabel: { fontWeight: '900', fontSize: 11, textAlign: 'center', flexShrink: 1 },
-  buttonLabel_primary: { color: colors.white },
-  buttonLabel_secondary: { color: colors.pine },
+  buttonLabel_primary: { color: colors.onPrimary },
+  buttonLabel_secondary: { color: colors.actionText },
   buttonLabel_ghost: { color: colors.ink },
   buttonLabel_danger: { color: colors.danger },
   fieldLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 },

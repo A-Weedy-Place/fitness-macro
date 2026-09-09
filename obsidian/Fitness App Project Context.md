@@ -4,6 +4,17 @@ project: fitness-macro
 updated: 2026-09-09
 ---
 
+## Navigation, contrast and fast-delivery checkpoint — 2026-09-09
+
+This checkpoint supersedes older workflow instructions. Issue [#33](https://github.com/A-Weedy-Place/fitness-macro/issues/33), app-code patch **0.2.4**, unchanged native runtime **0.2.2**. Publication status and exact OTA group belong on the [versioned release](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.4); do not infer publication merely from the source version.
+
+- Owner wants professional **but fast** iteration: one related-fix batch, one issue, one `codex/` PR including version/changelog/context, one PR CI gate, then merge/tag/release and exact-tag preview OTA. No mandatory second Release Please PR, duplicate post-merge CI, unrelated Worker redeployment or new APK for JS-only fixes. Release Please is manual/optional. See docs/releases-and-updates.md.
+- Run focused regressions during work and full changed-package tests/typecheck on final code. Repeat only for changed code or failures. Keep native/runtime compatibility, credentials, user-data safety and CI failures as hard stops. Batch scoped approvals where permitted; never bypass sandbox permissions for speed.
+- Android Back uses explicit layer priorities: keyboard, active native modal/editor, inline settings/cookbook layer, Today, then system exit. Settings/custom-food local form state survives returning to the parent. Leaving a recipe editor asks before discarding; quick-food Back first closes portion editing/review, then confirms before losing selected foods. Saving prevents dismissal.
+- Charcoal now separates readable action text from dark decorative fills; selected Today/tab foregrounds are inverted appropriately. Warm Harvest remains unchanged. Themes still update live without remounting and the stale reload wording is removed.
+- Quick food selection has a fixed Review & edit control above Log, short added/Undo feedback, and explicit not-logged-yet wording. Search stays mounted to preserve scroll position. Review edits the same draft; selection is not a diary write, failed saves retain it, and repeated Apply is guarded.
+- Phone acceptance: Appearance → Back returns Account; Back from Account returns Today; Charcoal Account/secondary buttons/selected date and tab stay readable; select a food while scrolled, Review/edit/Undo without losing search position; Back does not silently lose selection. Keyboard/footer and Android gestures still need physical-device verification.
+
 ## Current reliability and OTA checkpoint — 2026-09-09
 
 This section supersedes conflicting historical notes below. Tracking issue: [#29](https://github.com/A-Weedy-Place/fitness-macro/issues/29). The owner confirmed installed preview APK **v0.2.2** and requested the next fixes through **You → Updates**.

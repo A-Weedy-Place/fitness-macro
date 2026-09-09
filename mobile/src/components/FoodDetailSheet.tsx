@@ -46,7 +46,7 @@ export function FoodDetailSheet({ food, foods, recipes, onClose, onAdd, onEditFo
     <View style={styles.top}><Pressable style={styles.close} disabled={saving} onPress={onClose}><Text style={styles.closeText}>×</Text></Pressable><Text style={styles.topTitle}>{recipe ? 'Dish details' : 'Food details'}</Text><View style={styles.topSpacer} /></View>
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 126 + footerPadding }]} showsVerticalScrollIndicator={false}>
       {food.imageUri ? <Image source={{ uri: food.imageUri }} style={styles.heroPhoto} /> : <Text style={styles.heroEmoji}>{foodEmoji(food)}</Text>}<Text style={styles.name}>{food.name}</Text>{food.brand ? <Text style={styles.brand}>{food.brand}</Text> : null}
-      <View style={styles.macros}><Macro value={total.calories.toFixed(0)} label="Calories" color={colors.pine} large /><Macro value={total.protein.toFixed(1)} label="Protein" color={colors.pine} /><Macro value={total.fat.toFixed(1)} label="Fat" color={colors.pine} /><Macro value={total.carbs.toFixed(1)} label="Carbs" color={colors.pine} /></View>
+      <View style={styles.macros}><Macro value={total.calories.toFixed(0)} label="Calories" color={colors.actionText} large /><Macro value={total.protein.toFixed(1)} label="Protein" color={colors.actionText} /><Macro value={total.fat.toFixed(1)} label="Fat" color={colors.actionText} /><Macro value={total.carbs.toFixed(1)} label="Carbs" color={colors.actionText} /></View>
       <View style={styles.divider} />
       <PortionEditor food={food} quantity={quantity} unit={unit} onQuantityChange={setQuantity} onUnitChange={setUnit} label="Amount" />
       {recipe ? <View style={styles.ingredients}><SectionTitle title="Ingredients" detail={`${ingredientRows.length} in full batch`} />{ingredientRows.map(({ item, ingredient, grams: itemGrams, macros }) => <View key={item.foodId} style={styles.ingredient}><Text style={styles.ingredientEmoji}>{foodEmoji(ingredient)}</Text><View style={styles.ingredientCopy}><Text style={styles.ingredientName} numberOfLines={2}>{ingredient.name}</Text><Text style={styles.ingredientAmount}>{item.quantity} {item.unit} · {itemGrams.toFixed(0)} g</Text><Text style={styles.ingredientMacros}>{macros.calories.toFixed(0)} kcal · {macros.protein.toFixed(1)}P · {macros.fat.toFixed(1)}F · {macros.carbs.toFixed(1)}C</Text></View></View>)}</View> : null}
@@ -54,7 +54,7 @@ export function FoodDetailSheet({ food, foods, recipes, onClose, onAdd, onEditFo
       {recipe ? <View style={styles.ingredients}>
         <Text style={styles.ingredientName}>Recipe source</Text>
         <Text style={styles.ingredientAmount}>{recipe.sourceName || (recipe.reviewStatus === 'manual' ? 'Your own recipe' : 'Ingredient-based estimate')}</Text>
-        {sourceUrl ? <Pressable accessibilityRole="link" onPress={() => void openSource()}><Text style={[styles.ingredientMacros, { color: colors.pine, textDecorationLine: 'underline' }]}>Open ingredient reference ↗</Text></Pressable> : null}
+        {sourceUrl ? <Pressable accessibilityRole="link" onPress={() => void openSource()}><Text style={[styles.ingredientMacros, { color: colors.actionText, textDecorationLine: 'underline' }]}>Open ingredient reference ↗</Text></Pressable> : null}
         {recipe.sourceLicense ? <Text style={styles.ingredientAmount}>License: {recipe.sourceLicense}</Text> : null}
         {recipe.reviewStatus === 'ai_estimated' ? <Text style={styles.ingredientAmount}>Nutrition is estimated. An ingredient reference is not nutrition verification.</Text> : null}
       </View> : null}

@@ -1,4 +1,5 @@
 import { themedStyles } from './src/theme';
+import { useAndroidBack } from './src/hooks/useAndroidBack';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState as NativeAppState, LayoutAnimation, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -153,6 +154,11 @@ function FitnessApp() {
   const [hydrated, setHydrated] = useState(false);
   const [returnToAppearance] = useState(() => consumeThemeAppearanceReturn());
   const [activeTab, setActiveTab] = useState<TabKey>(() => returnToAppearance ? 'profile' : 'today');
+  useAndroidBack(() => {
+    if (!hydrated || !state.profile?.onboardingComplete || activeTab === 'today') return false;
+    changeTab('today');
+    return true;
+  }, 0);
   const [date, setDate] = useState(today());
   const [libraryTime, setLibraryTime] = useState('08:00');
   const [quickLogVisible, setQuickLogVisible] = useState(false);

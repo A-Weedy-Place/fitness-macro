@@ -1,7 +1,7 @@
 {
   "name": "fitness-macro-mobile",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
