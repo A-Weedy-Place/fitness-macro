@@ -20,7 +20,7 @@ Every product change follows this traceable path, including work done by Codex:
 2. Work happens on `codex/issue-<number>-short-description`, never directly on `main`.
 3. The branch is pushed and a pull request links the issue with `Closes #<number>`.
 4. GitHub Actions must pass before merge. The PR contains the tests performed and whether an EAS Update or new APK is needed.
-5. A Conventional Commit PR title lets Release Please prepare the version/changelog PR. Merge it to create the immutable GitHub tag and Release.
+5. Include version/changelog/context in this same PR. After the single CI gate, squash-merge and create the immutable tag and GitHub Release. Release Please is optional, not a second required PR.
 6. For native changes—or when the owner explicitly requests a fresh installable test build—run **Build release APK** for that tag. Choose `preview` for owner testing and `production` only for a future public-ready build. The workflow builds the exact tag, downloads the signed APK from EAS, and attaches the profile-labelled file to the matching GitHub Release. For compatible JavaScript/assets, a preview EAS Update may be tested first.
 
 Do not call an Expo artifact alone a release. The GitHub Release is the permanent release record and carries the APK when a new native build is required.
@@ -32,10 +32,6 @@ cd mobile
 npm ci
 npm run typecheck
 npm test
-
-cd ..\relay
-npm ci
-npm run typecheck
 ```
 
 ## Commit and PR titles

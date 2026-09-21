@@ -1,20 +1,9 @@
-# Weed Fitness mobile app
+# Weed Fitness mobile
 
-Expo SDK 57 / React Native 0.86 local-first nutrition journal.
+Expo SDK 57 / React Native 0.86, local-first nutrition journal.
 
-- `Today`: targets, macro split, meal diary, one daily weight, and activity.
-- `Plans`: reusable food plans and an evidence-informed, AI-personalized meal structure.
-- `Trends`: adherence, logging, activity, macro, and weight trends.
-- `Food`: recent foods, personal cookbook, reference search/barcode lookup, voice phrase preview, and recipes.
-- `You`: profile, themes, local PIN, Health Connect, AI status, and backup/restore.
+AI now uses each user's Groq key configured in **You → AI & API key**. Whisper transcription and GPT-OSS planning call Groq directly. SecureStore holds the key; no relay, PC, shared token or automatic cloud diagnostics is used.
 
-The APK calls the private HTTPS relay directly for Groq Whisper and GPT-OSS. It never connects to a PC and never asks the owner to enter an AI key. The diary remains on the device.
+Manual diary, recipes, goals and trends work without a key. Public catalogue search also requires no AI key.
 
-Run local checks with:
-
-```powershell
-npm run typecheck
-npm test
-```
-
-See [standalone testing](../docs/standalone-testing.md) for installing the preview APK.
+Run `npm ci`, `npm run typecheck`, and `npm test` here. See [test guide](../docs/standalone-testing.md). Native runtime stays 0.2.2 until native dependencies/configuration change.

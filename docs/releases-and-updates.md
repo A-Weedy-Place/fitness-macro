@@ -20,7 +20,7 @@ Use for JavaScript/TypeScript/assets without native changes. Current installed o
 3. Verify successful Android update publication, runtime0.2.2 and channel mapping. Record the group and release evidence.
 4. Owner opens You → Updates → Check for updates → downloads → restarts when ready. The JavaScript version advances while the installed APK version remains0.2.2. Themes themselves never need a restart.
 
-The repository can remain private: EAS hosts the update separately, without putting GitHub credentials in the app. Do not publish private owner testing to production by default.
+The repository is now public; it could also remain private: EAS hosts the update separately, without putting GitHub credentials in the app. Do not publish private owner testing to production by default.
 
 runtimeVersion is explicit, independent of the patch release version. It remains0.2.2 only while native dependencies/configuration stay compatible. Any native dependency, plugin, permission, Expo SDK or native configuration change MUST bump it and ship a replacement APK. Do not force incompatible code into an old runtime.
 
@@ -30,7 +30,7 @@ After a native change and versioned release, run Actions → Build release APK o
 
 ## Credentials and rollback
 
-Both delivery workflows use GitHub Actions secret EXPO_TOKEN. Keep it out of chat/source/logs; revoke and replace any exposed token before relying on it. The EAS preview environment supplies the separate extractable EXPO_PUBLIC_RELAY_ACCESS_TOKEN and temporary telemetry flag. Proper account/device authentication is required before public distribution.
+Both delivery workflows use GitHub Actions secret EXPO_TOKEN. Keep it out of chat/source/logs; revoke and replace any exposed token before relying on it. AI uses each user's Groq key stored in device SecureStore, not EAS environment variables. No relay access token or automatic cloud telemetry belongs in a build.
 
 If the GitHub publishing token is untrusted, a separately authenticated local Expo session may publish the exact tested tag with `eas update --platform android --channel preview --environment preview --message <release-note> --non-interactive`. Verify EXPO_TOKEN is absent from that shell; do not use the exposed credential as a fallback. Record the tag commit, update group, channel and runtime on the GitHub Release. This retains the issue/PR/CI/versioned-release trail; it does not authorize an untracked development update. The exposed token still needs revocation/replacement.
 

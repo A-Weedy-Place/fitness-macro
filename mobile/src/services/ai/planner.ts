@@ -1,33 +1,13 @@
 import { compactAppContext } from './compactContext';
 import { assistantPlanSchema, foodResolutionSchema, nutritionAdviceSchema } from './schemas';
-import { assistantActionDomainIssue, assistantIngredientIssue, validAssistantDate } from '../../mobile/src/logic/assistantActions';
-import { assistantFoodPortion, canonicalAssistantUnit } from '../../mobile/src/logic/assistantExecution';
-import type { AssistantAction, FoodItem, UserProfile } from '../../mobile/src/types';
-import { consumeRouteBudget, routeBucket, retryAfterSeconds } from './rateLimits';
+import { assistantActionDomainIssue, assistantIngredientIssue, validAssistantDate } from '../../logic/assistantActions';
+import { assistantFoodPortion, canonicalAssistantUnit } from '../../logic/assistantExecution';
+import type { AssistantAction, FoodItem, UserProfile } from '../../types';
 import { lookupRecipeReference, type RecipeReference, referenceTitleMatches } from './recipeReferences';
-import { legacyAssistantPlan, legacyFoodResolution, supportsExactPortions } from './protocol';
-import { providerDiagnostic } from './providerDiagnostics';
-import { recoverNullableGeneration } from './structuredRecovery';
-
-interface Env {
-  GROQ_API_KEY?: string;
-  APP_ACCESS_TOKEN?: string;
-  /** Bound only on the private testing relay; never used by a public build. */
-  TEST_TELEMETRY?: D1Database;
-}
-
+import { requestGroqJson, publicFetch } from './groqTransport';
+import { today } from '../../utils/dates';
 type JsonRecord = Record<string, unknown>;
-
-const jsonHeaders = {
-  'content-type': 'application/json; charset=utf-8',
-  'cache-control': 'no-store',
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'content-type, x-fitnessmacro-app-token, x-audio-filename, x-weed-fitness-protocol',
-  'access-control-allow-methods': 'GET, POST, OPTIONS'
-};
-const encoder = new TextEncoder();
-const MAX_JSON_BYTES = 300_000;
-const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+interface AiCredentials { apiKey: string }
 
 const programSources = [
   { title: 'WHO: What are healthy diets?', url: 'https://www.who.int/publications/i/item/9789240101876' },
@@ -82,20 +62,6 @@ const programSystem = [
   'The output is a flexible example day; variety and user recipes remain allowed.'
 ].join('\n');
 
-function respond(status: number, value: unknown): Response {
-  return new Response(JSON.stringify(value), { status, headers: jsonHeaders });
-}
-
-function reject(status: number, code: string, retryAfter?: number): Response {
-  return new Response(JSON.stringify({ error: code, ...(retryAfter ? { retryAfterSeconds: retryAfter } : {}) }), {
-    status, headers: { ...jsonHeaders, ...(retryAfter ? { 'retry-after': String(retryAfter) } : {}) }
-  });
-}
-
-class RelayFailure extends Error {
-  constructor(code: string, readonly retryAfter?: number) { super(code); }
-}
-
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
 }
@@ -119,134 +85,6 @@ function validDate(value: unknown, fallback: string): string {
 
 function validTime(value: unknown, fallback: string): string {
   return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : fallback;
-}
-
-async function requestAllowed(request: Request, env: Env): Promise<Response | null> {
-  const configuredToken = env.APP_ACCESS_TOKEN?.trim();
-  const receivedToken = request.headers.get('x-fitnessmacro-app-token')?.trim();
-  if (!configuredToken || !receivedToken || receivedToken !== configuredToken) return reject(401, 'unauthorized_app');
-
-  const bucket = routeBucket(new URL(request.url).pathname);
-  const result = await consumeRouteBudget(bucket, env.TEST_TELEMETRY);
-  if (!result.allowed) return reject(429, bucket === 'telemetry' ? 'telemetry_hourly_limit_reached' : `relay_${bucket}_limit_reached`, result.retryAfterSeconds);
-  return null;
-}
-
-async function readJson(request: Request): Promise<JsonRecord> {
-  const declaredBytes = finiteNumber(request.headers.get('content-length'));
-  if (declaredBytes > MAX_JSON_BYTES) throw new Error('request_too_large');
-  const text = await request.text();
-  if (encoder.encode(text).byteLength > MAX_JSON_BYTES) throw new Error('request_too_large');
-  const parsed = JSON.parse(text) as unknown;
-  const object = asRecord(parsed);
-  if (!object) throw new Error('invalid_json');
-  return object;
-}
-
-interface TelemetryInput {
-  id: string;
-  at: string;
-  type: string;
-  payload: unknown;
-}
-
-function telemetryEvents(value: unknown): TelemetryInput[] {
-  const input = asRecord(value);
-  const entries = Array.isArray(input?.events) ? input.events : [];
-  if (!entries.length || entries.length > 12) throw new Error('invalid_request');
-  return entries.map(asRecord).map((event) => {
-    const id = boundedString(event?.id, 120);
-    const at = boundedString(event?.at, 80);
-    const type = boundedString(event?.type, 80);
-    if (!id || !at || !type) throw new Error('invalid_request');
-    const payload = event?.payload ?? null;
-    const serialized = JSON.stringify(payload);
-    if (!serialized || serialized.length > 250_000) throw new Error('request_too_large');
-    return { id, at, type, payload };
-  });
-}
-
-async function storeTestTelemetry(input: JsonRecord, env: Env): Promise<JsonRecord> {
-  if (!env.TEST_TELEMETRY) throw new Error('telemetry_unavailable');
-  const deviceId = boundedString(input.deviceId, 120);
-  if (!deviceId || !/^test_device_[a-z0-9_]+$/i.test(deviceId)) throw new Error('invalid_request');
-  const events = telemetryEvents(input);
-  const receivedAt = new Date().toISOString();
-  await env.TEST_TELEMETRY.batch([
-    env.TEST_TELEMETRY.prepare("DELETE FROM test_telemetry_events WHERE received_at < datetime('now', '-90 days')"),
-    ...events.map((event) => env.TEST_TELEMETRY!.prepare(
-    'INSERT OR IGNORE INTO test_telemetry_events (event_id, device_id, occurred_at, received_at, event_type, payload_json) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(event.id, deviceId, event.at, receivedAt, event.type, JSON.stringify(event.payload)))
-  ]);
-  return { stored: events.length };
-}
-
-async function resetTestTelemetry(input: JsonRecord, env: Env): Promise<JsonRecord> {
-  if (!env.TEST_TELEMETRY) throw new Error('telemetry_unavailable');
-  const deviceId = boundedString(input.deviceId, 120);
-  if (!deviceId || !/^test_device_[a-z0-9_]+$/i.test(deviceId)) throw new Error('invalid_request');
-  await env.TEST_TELEMETRY.prepare('DELETE FROM test_telemetry_events WHERE device_id = ?').bind(deviceId).run();
-  return { deleted: true };
-}
-
-function relayError(error: unknown): Response {
-  const message = error instanceof Error ? error.message : 'request_failed';
-  if (message === 'request_too_large' || message === 'invalid_json' || message === 'invalid_request') return reject(400, message);
-  if (message === 'groq_free_limit_reached') return reject(429, message, error instanceof RelayFailure ? error.retryAfter : 60);
-  if (message === 'relay_limit_unavailable') return reject(503, message, 60);
-  if (message === 'groq_timeout') return reject(504, message);
-  if (['groq_empty_response', 'groq_invalid_response', 'groq_invalid_plan', 'groq_incomplete_plan'].includes(message) || /^groq_request_failed_\d{3}$/.test(message)) return reject(502, message);
-  return reject(502, 'ai_service_unavailable');
-}
-
-async function requestGroqJson<T>(env: Env, input: { system: string; user: string; schemaName: string; schema: JsonRecord; maxCompletionTokens?: number }): Promise<T> {
-  const apiKey = env.GROQ_API_KEY?.trim();
-  if (!apiKey) throw new Error('groq_not_configured');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45_000);
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'openai/gpt-oss-120b',
-        messages: [{ role: 'system', content: input.system }, { role: 'user', content: input.user }],
-        reasoning_effort: 'low',
-        temperature: 0.1,
-        // Single-purpose requests stay at 1K. The typed app planner may use up
-        // to 1.8K because its strict schema repeats nullable fields per action;
-        // a lower cap caused valid multi-time commands to omit ingredients.
-        max_completion_tokens: input.maxCompletionTokens || 1_000,
-        response_format: { type: 'json_schema', json_schema: { name: input.schemaName, strict: true, schema: input.schema } }
-      })
-    });
-    if (!response.ok) {
-      const failure = await response.json().catch(() => null);
-      console.warn(JSON.stringify(providerDiagnostic(response.status, failure, response.headers.get('x-request-id'), input.schemaName, input.maxCompletionTokens || 1000)));
-      const recovered = recoverNullableGeneration(response.status, failure, input.schema);
-      if (recovered) {
-        console.info(JSON.stringify({ event: 'groq_nullable_fields_recovered', schema: input.schemaName, fieldCount: recovered.repaired }));
-        return recovered.value as T;
-      }
-      if (response.status === 429) throw new RelayFailure('groq_free_limit_reached', retryAfterSeconds(response.headers.get('retry-after')));
-      throw new Error(`groq_request_failed_${response.status}`);
-    }
-    const payload = await response.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string | null } }>; error?: { code?: string; message?: string } };
-    if (payload.choices?.[0]?.finish_reason === 'length') throw new Error('groq_incomplete_plan');
-    const content = payload.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new Error('groq_empty_response');
-    try {
-      return JSON.parse(content) as T;
-    } catch {
-      throw new Error('groq_invalid_response');
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw new Error('groq_timeout');
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function normalizedName(value: unknown): string {
@@ -385,7 +223,7 @@ export function enforceAssistantPlan(value: unknown, compact: JsonRecord, comman
   };
 }
 
-async function createAssistantPlan(command: string, compact: JsonRecord, env: Env): Promise<JsonRecord> {
+export async function createAssistantPlan(command: string, compact: JsonRecord, env: AiCredentials): Promise<JsonRecord> {
   const request = (user: string) => requestGroqJson<JsonRecord>(env, {
     system: assistantSystem,
     user,
@@ -444,12 +282,14 @@ export function withRecipeReferences(plan: JsonRecord, references: RecipeReferen
   return { ...plan, actions, notes: hasUnreferencedRecipe ? [...notes, 'No matching ingredient reference was used for one or more new dishes. Their nutrition is AI-estimated, not verified.'].slice(-8) : notes };
 }
 
-async function stableFoodId(seed: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(seed));
-  return `llm_${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 20)}`;
+/** Deterministic local identity only, not a password/credential hash. No native crypto dependency. */
+export async function stableFoodId(seed: string): Promise<string> {
+  let a = 2166136261, b = 2246822519;
+  for (let i = 0; i < seed.length; i++) { const unit = seed.charCodeAt(i); a = Math.imul(a ^ unit, 16777619); b = Math.imul(b ^ unit, 3266489917); }
+  return 'llm_' + (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
 }
 
-async function resolveFood(input: JsonRecord, env: Env): Promise<JsonRecord> {
+export async function resolveFood(input: JsonRecord, env: AiCredentials): Promise<JsonRecord> {
   const transcript = boundedString(input.transcript);
   const defaultDate = validDate(input.defaultDate, '');
   const defaultTime = validTime(input.defaultTime, '12:00');
@@ -529,10 +369,10 @@ function allocate(total: number, shares: number[]): number[] {
   return values;
 }
 
-async function nutritionProgram(input: JsonRecord, env: Env): Promise<JsonRecord> {
+export async function nutritionProgram(input: JsonRecord, env: AiCredentials): Promise<JsonRecord> {
   const profile = asRecord(input);
   if (!profile || !['male', 'female', 'other'].includes(String(profile.sex)) || finiteNumber(profile.ageYears) < 13 || finiteNumber(profile.heightCm) < 80 || finiteNumber(profile.bodyWeightKg) < 25) throw new Error('invalid_request');
-  const targets = recommendGoal(profile, new Date().toISOString().slice(0, 10));
+  const targets = recommendGoal(profile, today(typeof profile.timeZone === 'string' ? profile.timeZone : undefined));
   const requestedMeals = Math.min(6, Math.max(2, Math.round(finiteNumber(profile.mealsPerDay, 3))));
   const draft = await requestGroqJson<JsonRecord>(env, {
     system: programSystem,
@@ -579,17 +419,17 @@ function foodFromOpenFoodFacts(product: JsonRecord): JsonRecord | null {
 
 const offFields = 'code,product_name,brands,serving_size,serving_quantity,nutriments';
 
-async function searchOpenFoodFacts(query: string): Promise<JsonRecord[]> {
+export async function searchOpenFoodFacts(query: string): Promise<JsonRecord[]> {
   const url = `https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=8&fields=${encodeURIComponent(offFields)}&search_terms=${encodeURIComponent(query)}`;
-  const response = await fetch(url, { headers: { 'user-agent': 'FitnessMacro/0.3 personal-test' } });
+  const response = await publicFetch(url);
   if (!response.ok) throw new Error('food_search_unavailable');
   const payload = asRecord(await response.json());
   return (Array.isArray(payload?.products) ? payload.products : []).map(asRecord).filter((product): product is JsonRecord => Boolean(product)).map(foodFromOpenFoodFacts).filter((food): food is JsonRecord => Boolean(food));
 }
 
-async function lookupOpenFoodFacts(code: string): Promise<JsonRecord> {
+export async function lookupOpenFoodFacts(code: string): Promise<JsonRecord> {
   if (!/^\d{8,14}$/.test(code)) throw new Error('invalid_request');
-  const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${encodeURIComponent(offFields)}`, { headers: { 'user-agent': 'FitnessMacro/0.3 personal-test' } });
+  const response = await publicFetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${encodeURIComponent(offFields)}`);
   if (!response.ok) throw new Error('food_search_unavailable');
   const payload = asRecord(await response.json());
   const item = payload ? foodFromOpenFoodFacts(asRecord(payload.product) || {}) : null;
@@ -597,71 +437,8 @@ async function lookupOpenFoodFacts(code: string): Promise<JsonRecord> {
   return item;
 }
 
-async function transcribe(request: Request, env: Env): Promise<JsonRecord> {
-  const declaredBytes = finiteNumber(request.headers.get('content-length'));
-  if (declaredBytes > MAX_AUDIO_BYTES) throw new Error('request_too_large');
-  const bytes = await request.arrayBuffer();
-  if (!bytes.byteLength || bytes.byteLength > MAX_AUDIO_BYTES) throw new Error('request_too_large');
-  const mime = request.headers.get('content-type') || 'audio/mp4';
-  const rawName = request.headers.get('x-audio-filename') || 'food-recording.m4a';
-  const filename = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'food-recording.m4a';
-  const form = new FormData();
-  form.set('file', new Blob([bytes], { type: mime }), filename);
-  form.set('model', 'whisper-large-v3-turbo');
-  form.set('response_format', 'json');
-  let response: Response;
-  try {
-    response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { authorization: `Bearer ${env.GROQ_API_KEY?.trim() || ''}` }, body: form, signal: AbortSignal.timeout(45_000) });
-  } catch (error) {
-    if (error instanceof Error && ['AbortError', 'TimeoutError'].includes(error.name)) throw new Error('groq_timeout');
-    throw error;
-  }
-  if (!response.ok) {
-    if (response.status === 429) throw new RelayFailure('groq_free_limit_reached', retryAfterSeconds(response.headers.get('retry-after')));
-    throw new Error(`groq_request_failed_${response.status}`);
-  }
-  const payload = asRecord(await response.json());
-  const text = boundedString(payload?.text, 8_000);
-  if (!text) throw new Error('groq_empty_response');
-  return { text, engine: 'groq-whisper-large-v3-turbo', retained: false };
-}
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: jsonHeaders });
-    const path = new URL(request.url).pathname;
-    try {
-      const authorizationError = await requestAllowed(request, env);
-      if (authorizationError) return authorizationError;
-      if (request.method === 'GET' && path === '/v1/audio/status') return respond(200, { configured: Boolean(env.GROQ_API_KEY?.trim()), retention: 'none', provider: 'groq', mode: 'hosted_relay', model: 'whisper-large-v3-turbo' });
-      if (request.method === 'GET' && path === '/v1/agent/status') return respond(200, { revision: 'audit-hardening-2026-09-09', appAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', busy: false, timeoutSeconds: 110 }, foodAgent: { enabled: Boolean(env.GROQ_API_KEY?.trim()), provider: 'groq-hosted-relay', liveSearch: false, recipeReferences: 'wikibooks-ingredient-reference', nutritionVerified: false, busy: false, timeoutSeconds: 45 } });
-      if (request.method === 'POST' && path === '/v1/audio/transcribe') return respond(200, await transcribe(request, env));
-      if (request.method === 'POST' && path === '/v1/assistant/plan') {
-        const input = await readJson(request); const command = boundedString(input.command); if (!command) throw new Error('invalid_request');
-        const compact = compactAppContext(command, input.context);
-        const plan = await createAssistantPlan(command, compact, env);
-        return respond(200, supportsExactPortions(request) ? plan : legacyAssistantPlan(plan, input.context));
-      }
-      if (request.method === 'POST' && path === '/v1/agent/command') {
-        const resolution = await resolveFood(await readJson(request), env);
-        return respond(200, supportsExactPortions(request) ? resolution : legacyFoodResolution(resolution));
-      }
-      if (request.method === 'POST' && path === '/v1/goals/recommendation') return respond(200, await nutritionProgram(await readJson(request), env));
-      if (request.method === 'POST' && path === '/v1/test-telemetry') return respond(200, await storeTestTelemetry(await readJson(request), env));
-      if (request.method === 'POST' && path === '/v1/test-telemetry/reset') return respond(200, await resetTestTelemetry(await readJson(request), env));
-      if (request.method === 'GET' && path === '/v1/foods/search') {
-        const query = boundedString(new URL(request.url).searchParams.get('q'), 120); if (!query) throw new Error('invalid_request');
-        const items = await searchOpenFoodFacts(query); return respond(200, { query, items, fromCache: false, cachedCount: 0 });
-      }
-      if (request.method === 'GET' && path === '/v1/recipes/reference') {
-        const query = boundedString(new URL(request.url).searchParams.get('q'), 100); if (!query) throw new Error('invalid_request');
-        return respond(200, { reference: await lookupRecipeReference(query), nutritionVerified: false });
-      }
-      const barcodeMatch = path.match(/^\/v1\/foods\/barcode\/([^/]+)$/);
-      if (request.method === 'GET' && barcodeMatch) return respond(200, { item: await lookupOpenFoodFacts(decodeURIComponent(barcodeMatch[1])) });
-      return reject(404, 'not_found');
-    } catch (error) {
-      return relayError(error);
-    }
-  }
-} satisfies ExportedHandler<Env>;
+export async function planCommand(command: string, context: unknown, credentials: AiCredentials): Promise<JsonRecord> {
+  const text = boundedString(command); if (!text) throw new Error('invalid_request');
+  return createAssistantPlan(text, compactAppContext(text, context), credentials);
+}

@@ -1,20 +1,14 @@
-# Voice architecture
+# Direct Groq voice and food agent
 
-## Current production flow
+1. User records temporary audio with the microphone button.
+2. The phone sends multipart audio directly to Groq `whisper-large-v3-turbo` using the user's SecureStore key.
+3. The returned transcript fills the editable input. No reasoning or logging is automatic.
+4. User deliberately sends the text. The on-phone planner builds bounded local context and calls Groq `openai/gpt-oss-120b`.
+5. Strict schema/domain checks validate proposed actions. Nullable-field recovery cannot invent quantities. Correction and optional Wikibooks reference refinement share a maximum of two model calls.
+6. User confirms; the app applies changes atomically to its local store.
 
-1. The Android app records temporary audio after the owner taps its compact microphone button.
-2. The APK sends that audio by HTTPS to the private FitnessMacro Cloudflare Worker.
-3. The Worker uses its server-side Groq credential to call `whisper-large-v3-turbo` and returns only the transcript.
-4. The app places the transcript into its editable text field. Nothing is sent to the reasoning model and no food is logged at this point.
-5. The owner deliberately edits the text and taps **Search**, **Ask AI**, or **Send**. Only those actions may call the GPT-OSS food agent.
-6. Any action plan remains a proposal until the owner taps **Apply**. The app writes approved changes to its own local database.
+No server or model runs on a PC. Models are not downloaded to the phone. There is no Cloudflare relay, shared developer key or fallback credential.
 
-## Privacy and product boundary
+Manual Open Food Facts lookup uses a separate unauthenticated transport. Only fixed Groq endpoints accept the API key. Keys stay outside diary state, backups, logs and source. User key validation reads the model list, not generated tokens. Groq handles submitted information under its own account/privacy policies.
 
-- The runtime path is `APK → private HTTPS relay → Groq`; there is no PC, LAN address, paired local agent, Codex CLI, or on-device Whisper model.
-- The Worker stores no raw audio, transcript, diary, profile, or recipe data. The app does not retain raw audio after transcription.
-- The APK has no Groq API key. The Worker owns the encrypted server-side secret; an APK-only relay token is a rotatable private-preview safeguard, not public-release authentication.
-
-## Design rule
-
-Speech capture is an input method, not an autonomous command. It must remain compact, editable, and confirmation-gated so the owner always sees what will be searched or applied.
+App-generated audio is temporary and existing cleanup remains active. Provider retention is not controlled by the app. Rate-limit errors report the user's Groq allowance and retry guidance; no automatic paid fallback occurs.

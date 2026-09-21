@@ -9,7 +9,7 @@ Closes #
 ## How was it tested?
 
 - [ ] `cd mobile && npm run typecheck && npm test`
-- [ ] `cd relay && npm run typecheck` when relay code changed
+- [ ] Keys excluded from source, backups, diagnostics and build configuration
 - [ ] Tested the affected flow on a device/build when UI or native behavior changed
 
 ## Release impact

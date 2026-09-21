@@ -1,4 +1,5 @@
-import { foodQueryTerms } from '../../mobile/src/logic/assistantExecution';
+import { publicFetch } from './groqTransport';
+import { foodQueryTerms } from '../../logic/assistantExecution';
 
 export interface RecipeReference {
   dishName: string;
@@ -28,7 +29,7 @@ export function extractReferenceIngredients(wikitext: string): string[] {
 async function wikiQuery(parameters: Record<string, string>): Promise<Record<string, any>> {
   const url = new URL(API);
   Object.entries({ action: 'query', format: 'json', formatversion: '2', ...parameters }).forEach(([key, value]) => url.searchParams.set(key, value));
-  const response = await fetch(url, { headers: { 'user-agent': 'WeedFitness/0.2 (private recipe testing; https://github.com/A-Weedy-Place/fitness-macro)' }, signal: AbortSignal.timeout(5000) });
+  const response = await publicFetch(url, 5000);
   if (!response.ok) throw new Error('reference_unavailable');
   const body = await response.text();
   if (body.length > 300_000) throw new Error('reference_too_large');

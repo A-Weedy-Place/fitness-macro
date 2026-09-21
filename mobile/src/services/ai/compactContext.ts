@@ -1,5 +1,5 @@
-import { foodQueryTerms } from '../../mobile/src/logic/assistantExecution';
-import { validAssistantDate } from '../../mobile/src/logic/assistantActions';
+import { foodQueryTerms } from '../../logic/assistantExecution';
+import { validAssistantDate } from '../../logic/assistantActions';
 type JsonRecord = Record<string, unknown>;
 
 function record(value: unknown): JsonRecord | null {

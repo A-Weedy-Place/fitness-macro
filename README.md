@@ -1,33 +1,29 @@
-# FitnessMacro
+# Weed Fitness
 
-FitnessMacro is a standalone, local-first Android nutrition diary. The app keeps the diary, cookbook, recipes, goals, trends, profile, local PIN, and backups on the phone.
+A standalone, local-first Android nutrition diary built with Expo/React Native. Diary, cookbook, recipes, goals, trends, profile, PIN and backups stay on the phone.
 
-AI is online but does not require a PC or a user-supplied API key:
+## AI: bring your own Groq key
+
+In **You → AI & API key**, open Groq, create your own key, paste it, and tap **Save & check**. The key is stored using device SecureStore, separate from diary state and backups. It is never supplied by this repository or a shared developer backend.
 
 ```text
-FitnessMacro APK → private Cloudflare Worker → Groq
-                         └→ encrypted GROQ_API_KEY secret
+Phone → Groq API (user's key)
+      → Open Food Facts / Wikibooks (public, no key)
 ```
 
-- Speech-to-text: Groq `whisper-large-v3-turbo`.
-- Food and action planning: Groq `openai/gpt-oss-120b`.
-- Safe deterministic target calculation remains in the app; AI only proposes confirmation-gated actions and meal structure.
-- Normal app operation does not persist raw audio, diary entries, recipes, or profile data in the Worker. Owner-authorised preview builds temporarily send diagnostic telemetry to a private Cloudflare D1 database; see [private test telemetry](docs/test-telemetry.md). This facility is disabled for production and is scheduled for removal before any public release.
+- Speech: `whisper-large-v3-turbo`; reasoning: `openai/gpt-oss-120b`.
+- No PC, Cloudflare relay, shared access token, Codex CLI or bundled local model.
+- AI proposes validated actions; you review and confirm before local diary changes.
+- Manual logging, saved/reference search, recipes and trends work without an AI key. Online catalogue lookup requires internet but not a key.
+- Use a Groq Free account if you require free usage. Your account's limits and billing apply; the app cannot turn a paid account into a free one.
+- Optional diagnostic history stays on the phone and is shared only explicitly. No automatic cloud collection.
 
-## Repository layout
+## Development
 
-- `mobile/` — Expo/React Native app and local-first data store (schema 7).
-- `relay/` — Cloudflare Worker which holds the Groq key in an encrypted secret and exposes only the required AI and Open Food Facts routes.
-- `context.md` and `obsidian/` — maintained project memory and design decisions.
+`mobile/` contains the app, planner and tests. Run `npm ci`, `npm run typecheck`, and `npm test` there. No server deployment or AI environment variables are required.
 
-## Owner testing
+See [test guide](docs/standalone-testing.md), [release workflow](docs/releases-and-updates.md), and [context](context.md). Related changes use one issue, one tested/versioned PR and one release. Compatible updates use EAS; native changes need a new APK.
 
-An installable Android preview APK is built with EAS. It already contains the relay address and a rotatable private-test access token; the tester does not enter a key or connect to a PC. See [standalone testing](docs/standalone-testing.md).
+## Privacy
 
-## Development and releases
-
-Changes are developed through issues and pull requests, checked by GitHub Actions, and released with Semantic Versioning. Installed builds receive compatible JavaScript and asset updates through EAS Update; native changes are shipped as a new signed APK. See [releases and in-app updates](docs/releases-and-updates.md) and [contributing](CONTRIBUTING.md).
-
-## Security boundary
-
-The Groq key is never committed or bundled in the APK. The current private test build contains a separate relay access token, which is rotatable but extractable from an APK; it protects against casual abuse only. Add real account/device authentication before broader distribution.
+AI requests send relevant text/profile/diary context or recordings directly to Groq under its policies. Keys are excluded from app-generated backups/diagnostic exports. Removing a saved key disables future AI calls but does not revoke it at Groq or cancel an already-sent request. Never paste keys into issues or chat.

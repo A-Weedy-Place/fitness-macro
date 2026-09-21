@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { enforceAssistantPlan, requestedTimes, resolveEntryId, withRecipeReferences } from '../src/index';
-import { compactAppContext } from '../src/compactContext';
-import { consumeRouteBudget, retryAfterSeconds, routeBucket } from '../src/rateLimits';
-import { extractReferenceIngredients, lookupRecipeReference, referenceTitleMatches } from '../src/recipeReferences';
-import { assistantActionDomainIssue, validAssistantDate } from '../../mobile/src/logic/assistantActions';
-import { assistantFoodPortion } from '../../mobile/src/logic/assistantExecution';
-import type { AssistantAction, FoodItem } from '../../mobile/src/types';
+import { enforceAssistantPlan, requestedTimes, resolveEntryId, withRecipeReferences } from '../src/services/ai/planner';
+import { plannerHarness } from './helpers/plannerHarness';
+import { compactAppContext } from '../src/services/ai/compactContext';
+import { extractReferenceIngredients, lookupRecipeReference, referenceTitleMatches } from '../src/services/ai/recipeReferences';
+import { assistantActionDomainIssue, validAssistantDate } from '../src/logic/assistantActions';
+import { assistantFoodPortion } from '../src/logic/assistantExecution';
+import type { AssistantAction, FoodItem } from '../src/types';
 
 const ingredient = { name: 'Milk', brand: null, quantity: 150, unit: 'ml', gramsPerUnit: 1, caloriesPer100g: 50, proteinPer100g: 3.3, carbsPer100g: 4.8, fatPer100g: 2, confidence: 0.8 };
 const action: AssistantAction = { type: 'log_foods', summary: 'Log milk', confidence: 0.9, targetId: null, date: '2026-09-09', time: '13:30', name: null, value: null, quantity: null, servings: null, durationMinutes: null, calories: null, protein: null, carbs: null, fat: null, displayName: null, targetWeightKg: null, activityFactor: null, goalMode: null, goalIntensity: null, targetDate: null, destination: null, ingredients: [ingredient] };
@@ -56,22 +56,14 @@ test('context retains actual day, selected diary day, bounded follow-up history 
 test('move-by-name searches source date, not destination date', () => {
   assert.equal(resolveEntryId({ ...action, type: 'change_entry_time', targetId: null, name: 'black coffee', date: '2026-09-09' }, { entries: [{ id: 'coffee_yesterday', foodName: 'Coffee, black', date: '2026-09-08' }] }, 'Move yesterday black coffee to today'), 'coffee_yesterday');
 });
-test('route counters isolate status and catalogue traffic from reasoning and give retry times', async () => {
-  assert.equal(routeBucket('/v1/assistant/plan'), 'reasoning'); assert.equal(routeBucket('/v1/agent/status'), 'status');
-  const now = 100_000_000;
-  for (let i = 0; i < 601; i++) await consumeRouteBudget('status', undefined, now);
-  assert.equal((await consumeRouteBudget('reasoning', undefined, now)).allowed, true);
-  assert.equal((await consumeRouteBudget('status', undefined, now)).allowed, false);
-  assert.equal(retryAfterSeconds('23'), 23); assert.equal(retryAfterSeconds(null), 60);
-});
 test('upstream non-JSON rate-limit errors retain the actual code and Retry-After', async () => {
   const original = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => { calls++; return new Response('provider busy', { status: 429, headers: { 'retry-after': '32' } }); };
   try {
-    const response = await worker.fetch(new Request('https://relay.test/v1/assistant/plan', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test' }, body: JSON.stringify({ command: 'Log milk', context: {} }) }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+    const response = await plannerHarness.fetch(new Request('https://direct-planner.test/v1/assistant/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ command: 'Log milk', context: {} }) }), { apiKey: 'synthetic-test-credential' });
     assert.equal(response.status, 429); assert.equal(response.headers.get('retry-after'), '32');
-    assert.deepEqual(await response.json(), { error: 'groq_free_limit_reached', retryAfterSeconds: 32 }); assert.equal(calls, 1);
+    assert.deepEqual(await response.json(), { error: 'groq_rate_limit', retryAfterSeconds: 32 }); assert.equal(calls, 1);
   } finally { globalThis.fetch = original; }
 });
 test('reference parsing matches dish names and preserves source attribution without verified macros', async () => {
@@ -106,7 +98,7 @@ test('correction and reference enrichment share one extra model call, never a th
     return Response.json(url.searchParams.has('list') ? { query: { search: [{ title: 'Cookbook:Biryani', pageid: 123 }] } } : { query: { pages: [{ pageid: 123, title: 'Cookbook:Biryani', revisions: [{ revid: 456, slots: { main: { content: '== Ingredients ==\n* 200 g rice\n* 1 tbsp oil\n== Method ==\nCook.' } } }] }] } });
   };
   try {
-    const response = await worker.fetch(new Request('https://relay.test/v1/assistant/plan', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test' }, body: JSON.stringify({ command: 'Make and log Biryani', context: {} }) }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+    const response = await plannerHarness.fetch(new Request('https://direct-planner.test/v1/assistant/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ command: 'Make and log Biryani', context: {} }) }), { apiKey: 'synthetic-test-credential' });
     assert.equal(response.status, 200); assert.equal(modelCalls, 2);
     const result = await response.json() as { actions: AssistantAction[] };
     assert.match(result.actions[0].sourceUrl || '', /en.wikibooks.org/);
@@ -117,7 +109,7 @@ test('quick-log resolution converts a non-default spoon to explicit grams and ig
   const original = globalThis.fetch;
   globalThis.fetch = async () => Response.json({ choices: [{ message: { content: JSON.stringify({ intent: 'log_foods', title: 'Milk', summary: 'Milk', dishName: null, dishServings: 1, logServings: 1, logDate: '2026-09-09', eatenAt: '13:30', clarification: null, foods: [{ ...ingredient, existingFoodId: 'milk', quantity: 2, unit: 'tbsp', gramsPerUnit: 14, sourceUrl: 'https://fake.invalid/made-up' }], notes: [] }) } }] });
   try {
-    const response = await worker.fetch(new Request('https://relay.test/v1/agent/command', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test', 'x-weed-fitness-protocol': '2' }, body: JSON.stringify({ transcript: 'Milk', defaultDate: '2026-09-09', defaultTime: '13:30', context: { userFoods: [milk] } }) }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+    const response = await plannerHarness.fetch(new Request('https://direct-planner.test/v1/agent/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ transcript: 'Milk', defaultDate: '2026-09-09', defaultTime: '13:30', context: { userFoods: [milk] } }) }), { apiKey: 'synthetic-test-credential' });
     assert.equal(response.status, 200);
     const result = await response.json() as { suggestions: Array<{ quantity: number; unit: string; sourceUrl?: string }> };
     assert.equal(result.suggestions[0].quantity, 28); assert.equal(result.suggestions[0].unit, 'g'); assert.equal(result.suggestions[0].sourceUrl, undefined);

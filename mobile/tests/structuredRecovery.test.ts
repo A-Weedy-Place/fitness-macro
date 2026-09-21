@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { enforceAssistantPlan } from '../src/index';
-import { assistantPlanSchema, foodResolutionSchema, nutritionAdviceSchema } from '../src/schemas';
-import { recoverNullableGeneration } from '../src/structuredRecovery';
+import { enforceAssistantPlan } from '../src/services/ai/planner';
+import { plannerHarness } from './helpers/plannerHarness';
+import { assistantPlanSchema, foodResolutionSchema, nutritionAdviceSchema } from '../src/services/ai/schemas';
+import { recoverNullableGeneration } from '../src/services/ai/structuredRecovery';
 
 const ingredient = { name: 'Milk', brand: null, quantity: 150, unit: 'ml', gramsPerUnit: 1, caloriesPer100g: 50, proteinPer100g: 3.3, carbsPer100g: 5, fatPer100g: 2, confidence: 0.9 };
 const action = { type: 'log_foods', summary: 'Log milk', confidence: 0.9, ingredients: [ingredient], date: '2026-09-09', time: '08:00' };
@@ -63,7 +64,7 @@ test('schema-valid recovery still rejects unsafe goals, dates and nutrition thro
   }
 });
 
-test('real relay400 nullable recovery needs one call; unsafe recovery cannot bypass the two-call correction ceiling', async () => {
+test('direct Groq400 nullable recovery needs one call; unsafe recovery cannot bypass the two-call correction ceiling', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   let unsafe = false;
@@ -73,10 +74,10 @@ test('real relay400 nullable recovery needs one call; unsafe recovery cannot byp
     if (unsafe) input.actions[0].ingredients[0].proteinPer100g = 900;
     return Response.json(failure(input), { status: 400 });
   };
-  const request = () => worker.fetch(new Request('https://relay.test/v1/assistant/plan', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test', 'x-weed-fitness-protocol': '2' },
+  const request = () => plannerHarness.fetch(new Request('https://direct-planner.test/v1/assistant/plan', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ command: 'Log 150 ml milk at 08:00', context: { currentDate: '2026-09-09', userFoods: [] } })
-  }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+  }), { apiKey: 'synthetic-test-credential' });
   try {
     const response = await request();
     assert.equal(response.status, 200); assert.equal(calls, 1);
@@ -102,10 +103,10 @@ test('saved-food empty ingredients receive a specific correction reason without 
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(output) } }] });
   };
   try {
-    const response = await worker.fetch(new Request('https://relay.test/v1/assistant/plan', {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-fitnessmacro-app-token': 'test', 'x-weed-fitness-protocol': '2' },
+    const response = await plannerHarness.fetch(new Request('https://direct-planner.test/v1/assistant/plan', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ command: 'Log 150 ml milk at 08:00', context: { currentDate: '2026-09-09', userFoods: [] } })
-    }), { APP_ACCESS_TOKEN: 'test', GROQ_API_KEY: 'test' });
+    }), { apiKey: 'synthetic-test-credential' });
     assert.equal(response.status, 200); assert.equal(calls, 2);
     const output = await response.json() as { actions: Array<{ ingredients: typeof ingredient[] }> };
     assert.equal(output.actions[0].ingredients[0].quantity, 150); assert.equal(output.actions[0].ingredients[0].unit, 'ml');
