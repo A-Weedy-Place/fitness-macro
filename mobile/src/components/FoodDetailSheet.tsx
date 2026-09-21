@@ -8,7 +8,7 @@ import { gramsForQuantity, servingQuantityForDisplay } from '../logic/portions';
 import { PortionEditor } from './PortionEditor';
 import { Button, SectionTitle } from './ui';
 import { colors } from '../theme';
-import { recordTestTelemetry } from '../logic/testTelemetry';
+import { recordLocalDiagnostic } from '../logic/localDiagnostics';
 import { safeRecipeSourceUrl } from '../logic/manualInput';
 
 function nutrition(food: FoodItem, grams: number) {
@@ -20,7 +20,7 @@ export function FoodDetailSheet({ food, foods, recipes, onClose, onAdd, onEditFo
   const insets = useSafeAreaInsets();
   const [quantity, setQuantity] = useState('1'); const [unit, setUnit] = useState('serving');
   const [saving, setSaving] = useState(false); const saveInFlight = useRef(false);
-  useEffect(() => { if (!food) return; setQuantity(String(food.serving.amount)); setUnit(food.serving.unit); recordTestTelemetry('food_detail_opened', { foodId: food.id, hasRecipe: recipes.some((recipe) => recipe.foodId === food.id) }); }, [food?.id]);
+  useEffect(() => { if (!food) return; setQuantity(String(food.serving.amount)); setUnit(food.serving.unit); recordLocalDiagnostic('food_detail_opened', { foodId: food.id, hasRecipe: recipes.some((recipe) => recipe.foodId === food.id) }); }, [food?.id]);
   const grams = food ? gramsForQuantity(food, Number(quantity) || 0, unit) : 0;
   const total = food ? nutrition(food, grams) : { calories: 0, protein: 0, fat: 0, carbs: 0 };
   const recipe = food ? recipes.find((item) => item.foodId === food.id) : undefined;

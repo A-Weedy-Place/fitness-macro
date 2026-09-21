@@ -69,7 +69,7 @@ import { HealthConnectStatus, openHealthConnectSettings, syncHealthConnect, reco
 import { buildDailySeries } from './src/logic/analytics';
 import { estimateAdaptiveExpenditure } from './src/logic/expenditure';
 import { diagnosticActions, exportAiDiagnostics, recordAiDiagnostic } from './src/logic/diagnostics';
-import { clearRemoteTestTelemetry, flushTestTelemetry, recordTestTelemetry, testingTelemetryEnabled } from './src/logic/testTelemetry';
+import { initializeLocalDiagnostics, recordLocalDiagnostic, localDiagnosticsEnabled } from './src/logic/localDiagnostics';
 import { assistantPlanIssue, assistantIngredientIssue, validAssistantDate, validAssistantTime } from './src/logic/assistantActions';
 import { resolvedServingQuantity } from './src/logic/resolvedPortions';
 import { weeklyChangeForGoal } from './src/logic/goals';
@@ -141,7 +141,7 @@ export default function App() {
     void SplashScreen.hideAsync();
   }, []);
   return (
-    <AppErrorBoundary onError={(error, info) => recordTestTelemetry('render_error', { message: error.message, componentStack: info.componentStack?.slice(0, 2_000) })}>
+    <AppErrorBoundary onError={(error, info) => recordLocalDiagnostic('render_error', { message: error.message, componentStack: info.componentStack?.slice(0, 2_000) })}>
       <SafeAreaProvider><FitnessApp /></SafeAreaProvider>
     </AppErrorBoundary>
   );
@@ -181,7 +181,7 @@ function FitnessApp() {
   function reportSaveFailure(error: unknown) {
     const message = error instanceof Error ? error.message : 'The phone could not save this change.';
     setStatus(`Not saved: ${message}`);
-    recordTestTelemetry('storage_write_failed', { message });
+    recordLocalDiagnostic('storage_write_failed', { message });
     Alert.alert('Change not saved', message);
   }
   function setState(update: AppState | ((current: AppState) => AppState)) {
@@ -197,7 +197,7 @@ function FitnessApp() {
     const previous = errorUtils?.getGlobalHandler?.();
     if (!errorUtils?.setGlobalHandler || !previous) return;
     const handler = (error: Error, isFatal?: boolean) => {
-      recordTestTelemetry('global_js_error', { message: error?.message || String(error), isFatal: Boolean(isFatal), stack: error?.stack?.slice(0, 4_000) });
+      recordLocalDiagnostic('global_js_error', { message: error?.message || String(error), isFatal: Boolean(isFatal), stack: error?.stack?.slice(0, 4_000) });
       previous(error, isFatal);
     };
     errorUtils.setGlobalHandler(handler);
@@ -206,7 +206,8 @@ function FitnessApp() {
 
   useEffect(() => {
     let mounted = true;
-    recordTestTelemetry('bootstrap_started');
+    void initializeLocalDiagnostics();
+    recordLocalDiagnostic('bootstrap_started');
     void loadState().then(async (loaded) => {
       if (loaded.profile && !loaded.goalHistory?.length) {
         const effectiveFrom = today(loaded.profile.timeZone);
@@ -218,11 +219,11 @@ function FitnessApp() {
       store.hydrate(loaded);
       setDate(today(loaded.profile?.timeZone));
       setHydrated(true);
-      recordTestTelemetry('app_loaded', { hasProfile: Boolean(loaded.profile?.onboardingComplete), localSchema: loaded.version });
+      recordLocalDiagnostic('app_loaded', { hasProfile: Boolean(loaded.profile?.onboardingComplete), localSchema: loaded.version });
     }).catch((error) => {
       if (!mounted) return;
       const failure = error instanceof Error ? error : new Error(String(error));
-      recordTestTelemetry('bootstrap_failed', { message: failure.message });
+      recordLocalDiagnostic('bootstrap_failed', { message: failure.message });
       setStartupError(failure);
     });
     return () => { mounted = false; };
@@ -242,7 +243,7 @@ function FitnessApp() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const timer = setTimeout(() => recordTestTelemetry('state_snapshot', { snapshot: testingSnapshot(state) }), 800);
+    const timer = setTimeout(() => recordLocalDiagnostic('state_snapshot', { snapshot: testingSnapshot(state) }), 800);
     return () => clearTimeout(timer);
   }, [state, hydrated]);
 
@@ -260,8 +261,8 @@ function FitnessApp() {
     const subscription = NativeAppState.addEventListener('change', (next) => {
       if (next === 'active') {
         if (wasBackgrounded.current) {
-          recordTestTelemetry('app_foregrounded');
-          void flushTestTelemetry();
+          recordLocalDiagnostic('app_foregrounded');
+          void initializeLocalDiagnostics();
           void refreshHealthConnect(false);
         }
         wasBackgrounded.current = false;
@@ -306,7 +307,7 @@ function FitnessApp() {
   }
 
   function changeTab(tab: TabKey) {
-    recordTestTelemetry('navigation', { destination: tab });
+    recordLocalDiagnostic('navigation', { destination: tab });
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveTab(tab);
   }
@@ -315,7 +316,7 @@ function FitnessApp() {
     try {
       await store.update((current) => mergeStateTransition(state, nextState, current));
       setStatus(success);
-      recordTestTelemetry('state_committed', { message: success, changes: testingStateDelta(state, nextState) });
+      recordLocalDiagnostic('state_committed', { message: success, changes: testingStateDelta(state, nextState) });
     } catch (error) { reportSaveFailure(error); throw error; }
   }
 
@@ -367,7 +368,7 @@ function FitnessApp() {
   }
 
   async function searchFoods(query: string) {
-    recordTestTelemetry('food_search_requested', { query: query.slice(0, 120) });
+    recordLocalDiagnostic('food_search_requested', { query: query.slice(0, 120) });
     const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const words = foodQueryTerms(query);
     const score = (food: FoodItem) => {
@@ -384,7 +385,7 @@ function FitnessApp() {
       return name.includes(normalized) || words.some((word) => name.includes(word));
     }).sort((a, b) => score(b) - score(a));
     if (local.length) {
-      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, resultCount: local.length });
+      recordLocalDiagnostic('food_search_finished', { query: query.slice(0, 120), localCount: local.length, resultCount: local.length });
       return local;
     }
     try {
@@ -393,12 +394,12 @@ function FitnessApp() {
       const combined = [...local, ...result.items];
       const unique = combined.filter((food, index) => combined.findIndex((candidate) => candidate.id === food.id) === index);
       const sorted = unique.sort((a, b) => score(b) - score(a));
-      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: result.items.length, resultCount: sorted.length });
+      recordLocalDiagnostic('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: result.items.length, resultCount: sorted.length });
       return sorted;
     } catch {
       // Manual local search stays available even when the optional catalogue
       // lookup is offline, rate-limited, or returns no compatible result.
-      recordTestTelemetry('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: 0, resultCount: local.length, hostedUnavailable: true });
+      recordLocalDiagnostic('food_search_finished', { query: query.slice(0, 120), localCount: local.length, hostedCount: 0, resultCount: local.length, hostedUnavailable: true });
       return local;
     }
   }
@@ -487,7 +488,7 @@ function FitnessApp() {
 
   function changeTheme(theme: AppThemeName) {
     if (theme === pendingTheme) return;
-    try { saveAppTheme(theme); setPendingTheme(theme); recordTestTelemetry('theme_changed', { theme }); }
+    try { saveAppTheme(theme); setPendingTheme(theme); recordLocalDiagnostic('theme_changed', { theme }); }
     catch { Alert.alert('Theme not saved', 'The phone could not store the appearance preference. Please try again.'); }
   }
 
@@ -510,9 +511,9 @@ function FitnessApp() {
   }
 
   async function performHealthConnectSync(requestAccess: boolean) {
-    recordTestTelemetry('health_connect_sync_started', { requestAccess });
+    recordLocalDiagnostic('health_connect_sync_started', { requestAccess });
     const result = await syncHealthConnect(requestAccess, 30, store.get().profile?.timeZone);
-    recordTestTelemetry('health_connect_sync_finished', { available: result.status.available, permissionGranted: result.status.permissionGranted, activityCount: result.activities.length, weightCount: result.weights.length });
+    recordLocalDiagnostic('health_connect_sync_finished', { available: result.status.available, permissionGranted: result.status.permissionGranted, activityCount: result.activities.length, weightCount: result.weights.length });
     setHealthConnect(result.status);
     if (result.syncWindow) {
       try { await store.update((current) => reconcileHealthConnectSync(current, result)); }
@@ -706,7 +707,7 @@ function FitnessApp() {
       await store.update((current) => current.profile?.updatedAt === profile.updatedAt ? ({ ...current, nutritionProgram: program }) : current);
       setStatus(response.review.aiGenerated ? 'Personalized food structure created with locked local targets.' : 'Safe local food structure created; AI personalization was unavailable.');
     } catch {
-      setStatus('Profile saved. Your local targets remain active while the hosted AI is unavailable.');
+      setStatus('Profile saved. Local targets are active. For an AI meal structure, add a valid Groq key in You → AI & API key, then save your profile again.');
     }
   }
 
@@ -829,18 +830,18 @@ function FitnessApp() {
   }
 
   function changeDate(offset: number | 'today') {
-    recordTestTelemetry('date_navigation', { offset });
+    recordLocalDiagnostic('date_navigation', { offset });
     setDate(offset === 'today' ? today(state.profile?.timeZone) : shiftDate(date, offset));
   }
 
   function openLibrary(time?: string) {
-    recordTestTelemetry('open_food_library', { time: time || null });
+    recordLocalDiagnostic('open_food_library', { time: time || null });
     if (time) setLibraryTime(time);
     changeTab('library');
   }
 
   function openQuickLog(time: string) {
-    recordTestTelemetry('open_quick_log', { time });
+    recordLocalDiagnostic('open_quick_log', { time });
     setQuickLogTime(time);
     setQuickLogVisible(true);
   }
@@ -856,7 +857,7 @@ function FitnessApp() {
   else if (activeTab === 'trends') screen = <TrendsScreen state={state} endDate={date} />;
   else if (activeTab === 'assistant') screen = <AssistantScreen state={state} selectedDate={date} messages={assistantMessages} plan={assistantPlan} busy={assistantBusy} onCommand={askAssistant} onTranscribe={transcribeFood} onConfirm={executeAssistantPlan} onDiscard={() => setAssistantPlan(null)} />;
   else if (activeTab === 'library') screen = <LibraryScreen state={state} date={date} initialTime={libraryTime} timeZone={state.profile?.timeZone} onSearch={searchFoods} onBarcode={barcodeFood} onResolve={resolveFoods} onTranscribe={transcribeFood} onAdd={addFoodEntry} onCreateCustom={createCustomFood} onCreateRecipe={createRecipe} onUpdateFood={updateFood} onUpdateRecipe={updateRecipe} />;
-  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => exportBackupWithMedia(store.get())} onUndoRestore={undoBackupRestore} onBeforeRestart={() => store.update((current) => current)} onExportDiagnostics={exportAiDiagnostics} testingTelemetryEnabled={testingTelemetryEnabled()} onClearTestTelemetry={clearRemoteTestTelemetry} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
+  else screen = <ProfileScreen state={state} date={date} status={status} healthConnect={healthConnect} audioConfigured={audioConfigured} appAgentEnabled={appAgentEnabled} initialPanel={returnToAppearance ? 'appearance' : undefined} activeTheme={pendingTheme} onThemeChange={changeTheme} onSave={saveProfileInput} onSavePhoto={saveProfilePhoto} pinEnabled={pinEnabled} onSetLocalPin={setLocalPin} onLoadDemo={loadDemo} onExport={() => exportBackupWithMedia(store.get())} onUndoRestore={undoBackupRestore} onBeforeRestart={() => store.update((current) => current)} onExportDiagnostics={exportAiDiagnostics} onImport={importBackup} onConnectHealth={() => void refreshHealthConnect(true)} onOpenHealthSettings={() => void openHealthConnectSettings()} onRefreshIntegrations={() => { void refreshIntegrationStatus(); void refreshHealthConnect(false); }} />;
 
   return (
     <SafeAreaView style={styles.root}>

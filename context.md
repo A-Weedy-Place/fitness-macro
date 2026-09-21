@@ -1,5 +1,18 @@
 # context.md
 
+## Current architecture — user-owned Groq keys (2026-09-21)
+
+**This supersedes ALL earlier no-key, Cloudflare, private-repository and automatic-cloud-telemetry instructions.** The owner explicitly changed the product to BYOK. Issue #35; app-code 0.3.0, native runtime 0.2.2. Check the GitHub Release for actual delivery/decommission status rather than inferring it from source.
+
+- Repository is public. GitHub secret scanning and push protection were enabled. A redacted history/public-discussion audit found no real provider secrets; old preview APKs nevertheless contain an extractable shared token. Never commit keys or copy chat credentials.
+- Users set their own Groq key in **You → AI & API key**, with masked entry, metadata-only validation, replacement and removal. Device SecureStore only: never AppState, AsyncStorage, Expo environment variables, logs, backups or a bundled fallback.
+- Phone calls Groq directly: Whisper Large V3 Turbo for speech, GPT-OSS120B for reasoning. The validated planner moved into mobile; no PC, local model, Cloudflare Worker, shared developer credential, Codex CLI or provider selector.
+- Manual logging/recipes/trends and saved/reference search work without a key; direct public Open Food Facts lookup also requires no key. Public Wikibooks reference enrichment remains optional and does not certify macros.
+- Preserve strict schema/domain validation, exact portions, confirmation/atomic Apply and at most two model calls per request. User account quota/billing applies; use a Groq Free account for free usage, never claim a paid key becomes free.
+- Automatic cloud diagnostics removed. Optional phone-only history defaults off, is bounded/redacted and explicitly shareable. Existing private D1 records are preserved as an archive; never delete personal history merely to retire the Worker. Do not claim the developer can automatically inspect this new app.
+- Existing runtime0.2.2 APK can receive this JS-only update. Users must add their own key afterward. Local diary/profile/backup remain intact. No native plugin/dependency changes.
+- Delivery remains one issue → one codex branch/versioned PR → passing PR CI → merge/tag/release → exact-tag preview OTA. Physical-phone voice/keyboard/secure-storage testing remains an acceptance step; do not claim mock tests prove device behavior.
+
 ## Navigation, contrast and fast-delivery checkpoint — 2026-09-09
 
 This checkpoint supersedes older workflow instructions. Issue [#33](https://github.com/A-Weedy-Place/fitness-macro/issues/33), app-code patch **0.2.4**, unchanged native runtime **0.2.2**. Publication status and exact OTA group belong on the [versioned release](https://github.com/A-Weedy-Place/fitness-macro/releases/tag/v0.2.4); do not infer publication merely from the source version.

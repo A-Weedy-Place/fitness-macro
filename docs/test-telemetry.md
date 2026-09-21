@@ -1,34 +1,11 @@
-# Private test telemetry
+# Local diagnostic history (replaces cloud test telemetry)
 
-This is a temporary, owner-authorised **preview-build** facility for finding real failures while Weed Fitness is still a private test project. It is not part of the planned public product.
+As of 0.3.0, the app has **no automatic cloud diagnostic upload** and no Cloudflare telemetry endpoint. Existing private D1 test records are an archival owner dataset; this migration does not delete them.
 
-## What the preview build sends automatically
+In **You → Backup & restore**, optional local testing history is off by default. When enabled it records meaningful navigation, actions, AI interactions and state snapshots locally. It is bounded to 400 events / approximately 500 KB, with oversized payloads omitted. It is not a promise of complete lossless history.
 
-- App navigation, profile panel views, food searches/results, food/detail editor opens, and important local state commits.
-- Structured before/after deltas for foods, diary entries, weights, activities, saved days, recipes, profile, and goals, so a log/edit/delete can be distinguished without guessing from a generic success message.
-- The complete test diary snapshot needed to reproduce a state: profile measurements, foods, recipes, diary entries, weight, activities, goals, plans, and nutrition program. Device-only image paths are excluded.
-- Typed AI commands, speech transcripts, assistant replies, proposed action ingredients/amounts, confirmation/apply outcomes, and safe relay error codes.
+Keys and credential fields are redacted. Raw audio is not included. History may contain private food/profile/chat data: share only explicitly with a trusted person. Clear local history removes this history and the obsolete unsent cloud queue, not the diary or secure API key.
 
-It never sends the Groq key, relay access token, local PIN, raw voice audio, device photo files, or indiscriminate screen/touch recordings. “Everything” in private testing means every meaningful product action and resulting state. Telemetry is queued locally while offline, uploaded in batches of up to ten, and retried later; it must never block a food log, edit, or any other normal action.
+The separate compact AI diagnostics remain phone-local and are also redacted. No developer can automatically read this device history. A user must explicitly share it for remote debugging.
 
-## Storage and removal
-
-- Queue operations are serialized. A successful upload acknowledges only the sent event IDs, keeping events created during that request. Both individual events and batches are limited by UTF-8 byte size; oversized payloads produce visible truncation markers. The bounded offline queue reports drops rather than claiming perfect retention. You → Backup & restore exposes upload/queue/error status.
-- Route rate limits are independent durable D1 buckets, so status checks and diagnostics cannot spend the reasoning quota. Public release must replace the shared preview token with real account/device authorization; that is separate from the owner-approved private diagnostics scope.
-
-- Only APKs built from the Expo `preview` environment receive `EXPO_PUBLIC_TEST_TELEMETRY=enabled`. Production does not.
-- Events are written through the existing private Cloudflare Worker into the private D1 database `weed-fitness-test-telemetry`; it is not in GitHub and is not public.
-- The Worker removes records older than 90 days. **You → Backup & restore → Clear this phone's cloud test data** immediately deletes the remote events associated with that test phone; subsequent preview activity starts a new trail automatically.
-
-## Evidence-based debugging
-
-The owner can query the private database from the authenticated project computer. For example:
-
-```powershell
-cd relay
-npm exec --yes --package=wrangler -- wrangler d1 execute weed-fitness-test-telemetry --remote --command "SELECT received_at, device_id, event_type, payload_json FROM test_telemetry_events ORDER BY id DESC LIMIT 100"
-```
-
-Use targeted queries for a particular device or failure window. Never paste database contents into a public issue, pull request, GitHub release, or a public chat.
-
-Before a public release, remove this build flag, delete the Worker telemetry routes and D1 binding/migration, and delete the D1 database after exporting anything the owner explicitly wants to retain.
+This supersedes historical instructions for automatic preview telemetry, D1 queries, shared access tokens and cloud clearing. Do not reintroduce those paths without a new explicit product decision and consent design.

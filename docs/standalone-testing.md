@@ -1,35 +1,16 @@
-# Standalone APK test guide
+# Standalone test guide — BYOK
 
-## What the APK needs
+1. Existing runtime 0.2.2 preview users: **You → Updates → Check for updates**, download and restart when ready. Do not uninstall or reset your diary.
+2. Open **You → AI & API key → Get a key from Groq**. Create your own Groq key, paste it and **Save & check**. Never send the key to the developer. Use a Free account if you do not want paid usage.
+3. Check invalid-key feedback. Failed validation must not replace a working key. Remove the key and verify manual logging/search/recipes still work; save it again for AI.
+4. Ask for two whole wheat rotis and mash ki dal at 1 PM. Review quantities, then Apply once. Check both diary entries and follow-up time changes.
+5. Record speech, stop, check/edit the transcript, deliberately send the text, and confirm the proposal. Transcription alone must not log food.
+6. Export a diary backup and optional local diagnostic history. Neither should contain the saved key. Restoring a diary backup must not import or replace a key.
+7. Switch themes while in Settings; no reload or navigation reset. Test Android Back, keyboard and modal safe areas on a physical phone.
+8. Health Connect requires the supported native APK and explicit permissions. Existing sync behavior is unchanged.
 
-- An Android phone with internet access.
-- No PC, local server, Wi-Fi address, pairing token, Groq account, or manually entered API key.
-- Health Connect requires the installable APK (not Expo Go) and Android support for Health Connect.
+Local calorie targets are deterministic estimates, not a medical prescription. For an AI meal structure after adding a key, save the profile again. Adaptive targets require sufficient complete logging and weigh-ins; see the in-app explanation.
 
-## First test pass
+Groq account quotas apply independently to speech and reasoning. Validation reads model metadata, not a completion. A planner request uses at most two model calls (including correction/reference refinement). Quota, authentication and connection failures must not change the diary.
 
-1. Install the preview APK and complete onboarding with realistic body, activity, cuisine, and goal details.
-2. Confirm the starting meal structure appears in **Goals** and that its calorie/protein targets match onboarding values.
-3. In **Food**, type: `two whole wheat rotis with one plate mash ki dal at 1 PM`. Review the proposed items, then confirm. Check that both foods appear at 1 PM.
-4. Repeat by voice. The microphone is a small button beside the text field: record, stop, review/edit the transcript, then deliberately tap **Ask AI**. It must not send, plan, or log automatically. Raw audio must not be retained.
-5. Ask the AI to add a one-off modifier such as `I had aloo keema with one extra tablespoon of oil`. Confirm that oil is a separate diary item rather than a changed saved recipe.
-6. Ask it to correct an entry time, delete an entry, and log today’s weight. Confirm it asks before applying each change and that only one weight remains for the day.
-7. In **You → Connections**, confirm Voice assistant and Food agent show ready without a PC-link form. Health Connect can be connected separately.
-8. In **You → Backup & restore**, share a backup, then verify no raw audio or credentials appear in it.
-
-## APK feedback regression pass
-
-1. In **Today**, check that all seven visible days run Monday through Sunday. Press an arrow: the entire strip must move exactly one week. Press the week label to return to today.
-2. Log a boiled egg. Tap its diary row, change the date, time, amount, and note, then save. The item must move to the selected day/time without changing the reusable egg reference.
-3. In **Food**, search `boiled egg` and `whole wheat roti` with internet available and then after temporarily disabling data. Saved/reference matches and **Custom food** / **Build a dish** must remain usable either way.
-4. In **You → Goals & daily plan**, open **How the plan updates**. Verify the normal view is compact and that it says it needs 10 food-log days plus a 14-day weight span before a bounded weekly automatic adjustment.
-5. In **You → Date & time**, leave **Device time** selected (or choose Pakistan UTC+5), then log food around local midnight. It must use the visible local calendar day.
-6. In **You → Appearance**, select another palette. The app may restart once, then must reopen in the selected palette.
-7. In **You → Connections → Connect Health**, the Android Health Connect permission screen or a clear result dialog must appear. If it says Health Connect is unavailable, first confirm the phone supports it, it is installed/up to date, and the phone has a screen lock.
-8. In **AI**, ask to log a food. The result must say it is not yet applied; tap **Apply**. The app must open **Today** on the affected date and show the entry there. Repeat once in quick food logging with **Ask AI → Apply AI log**.
-
-## Free-service behavior
-
-The app uses the Groq Free plan. If the AI is temporarily rate-limited, local logging, cookbook edits, trends, and backup remain usable. Wait for the displayed retry period before sending another AI request.
-
-The Worker’s access token is for the owner’s private test APK only and can be rotated on the next build. It is not public-release authentication.
+No shared developer key, Cloudflare service or automatic test upload is required. Optional diagnostics are off by default, bounded, redacted and phone-only; share explicitly when debugging. Old cloud test data, if any, remains a private archive rather than being deleted during migration.

@@ -1,3 +1,4 @@
+import { utf8Bytes } from '../../logic/bytes';
 type JsonRecord = Record<string, unknown>;
 type Checked = { value: unknown; repaired: number };
 const record = (value: unknown): JsonRecord | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
@@ -67,7 +68,7 @@ export function recoverNullableGeneration(status: number, payload: unknown, sche
   const error = record(record(payload)?.error);
   if (status !== 400 || error?.code !== 'json_validate_failed' || typeof error.failed_generation !== 'string') return null;
   const content = error.failed_generation;
-  if (content.length > 32_768 || new TextEncoder().encode(content).byteLength > 32_768) return null;
+  if (content.length > 32_768 || utf8Bytes(content) > 32_768) return null;
   try {
     const result = check(JSON.parse(content), schema);
     return result && result.repaired > 0 ? result : null;

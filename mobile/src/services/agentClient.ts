@@ -1,72 +1,9 @@
 import { File } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import { AssistantPlan, DailyGoal, FoodItem, UserProfile } from '../types';
-import type { TestTelemetryEvent } from '../logic/testTelemetry';
-
-// This public HTTPS address identifies the relay, not a secret. The Groq key stays only in Cloudflare.
-const RELAY_BASE_URL = 'https://fitness-macro-relay.fitness-macro-relay.workers.dev';
-const BUILD_ACCESS_TOKEN = process.env.EXPO_PUBLIC_RELAY_ACCESS_TOKEN?.trim() || '';
-
-class RelayError extends Error {
-  code: string;
-  retryAfterSeconds?: number;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = 'RelayError';
-    this.code = code;
-  }
-}
-
-function responseCode(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as { error?: unknown };
-    return typeof parsed.error === 'string' ? parsed.error : 'unknown_relay_error';
-  } catch {
-    return 'invalid_relay_error';
-  }
-}
-
-function missingBuildToken(): Error {
-  return new RelayError('unauthorized_app', 'This APK does not include the AI service. Install the latest private test build.');
-}
-
-function friendlyError(status: number, body: string): Error {
-  const code = responseCode(body);
-  if (status === 401) return missingBuildToken();
-  if (status === 429) {
-    let retry = 60;
-    try { retry = Math.max(1, Math.min(3600, Number(JSON.parse(body).retryAfterSeconds) || 60)); } catch { /* Use a bounded retry hint. */ }
-    const source = code.startsWith('relay_') ? 'This app’s request allowance' : 'Groq’s free allowance';
-    const error = new RelayError(code, `${source} is temporarily reached. Try again in about ${Math.ceil(retry / 60)} minute${retry > 60 ? 's' : ''}. Your diary is unchanged; manual logging still works.`);
-    error.retryAfterSeconds = retry; return error;
-  }
-  if (status === 504) return new RelayError(code, 'The AI service took too long. Please try again.');
-  if (code === 'food_not_found') return new RelayError(code, 'No nutrition data was found for that barcode.');
-  if (['groq_empty_response', 'groq_invalid_response', 'groq_invalid_plan', 'groq_incomplete_plan'].includes(code)) {
-    return new RelayError(code, 'The AI returned an incomplete action plan, so nothing was changed. Please try again.');
-  }
-  if (code.startsWith('groq_request_failed_')) return new RelayError(code, 'The AI provider could not complete that request. Nothing was changed; please try again shortly.');
-  return new RelayError(code, 'The AI service is temporarily unavailable. Please try again.');
-}
-
-function headers(contentType = 'application/json'): Record<string, string> {
-  if (!BUILD_ACCESS_TOKEN) throw missingBuildToken();
-  return { 'content-type': contentType, 'x-fitnessmacro-app-token': BUILD_ACCESS_TOKEN, 'x-weed-fitness-protocol': '2' };
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), path.includes('/assistant/') ? 115_000 : path.includes('/foods/') ? 10_000 : 55_000);
-  try {
-    const response = await fetch(`${RELAY_BASE_URL}${path}`, { ...init, signal: controller.signal, headers: { ...headers(), ...(init.headers as Record<string, string> || {}) } });
-    if (!response.ok) throw friendlyError(response.status, await response.text());
-    return await response.json() as T;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw new RelayError('connection_timeout', 'The connection timed out. Nothing was changed; please try again.');
-    throw error;
-  } finally { clearTimeout(timeout); }
-}
+import { hasGroqKey, requireGroqKey } from './groqKey';
+import { planCommand, resolveFood, nutritionProgram, searchOpenFoodFacts, lookupOpenFoodFacts } from './ai/planner';
+import { AiError, groqFetch, providerError, safeAiError, SPEECH_MODEL } from './ai/groqTransport';
 
 export interface SearchFoodResponse {
   query: string;
@@ -106,57 +43,54 @@ export interface GoalReviewResponse {
   };
 }
 
+
+async function withKey<T>(run: (credentials: { apiKey: string }) => Promise<unknown>): Promise<T> {
+  try { return await run({ apiKey: await requireGroqKey() }) as T; }
+  catch (error) { throw safeAiError(error); }
+}
 export async function getGoalRecommendation(profile: UserProfile): Promise<GoalReviewResponse> {
   const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = profile;
-  return request('/v1/goals/recommendation', { method: 'POST', body: JSON.stringify(input) });
+  return withKey((credentials) => nutritionProgram(input, credentials));
 }
-
 export async function searchFoods(query: string, limit = 8): Promise<SearchFoodResponse> {
-  return request(`/v1/foods/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`);
+  const term = query.trim().slice(0, 120);
+  if (!term) return { query: term, items: [], fromCache: false, cachedCount: 0 };
+  const items = await searchOpenFoodFacts(term) as unknown as FoodItem[];
+  return { query: term, items: items.slice(0, Math.min(8, Math.max(1, limit))), fromCache: false, cachedCount: 0 };
 }
-
 export async function lookupFoodByBarcode(code: string): Promise<{ item: FoodItem }> {
-  return request(`/v1/foods/barcode/${encodeURIComponent(code.trim())}`);
+  try { return { item: await lookupOpenFoodFacts(code.trim()) as unknown as FoodItem }; }
+  catch { throw new AiError('food_not_found', 'No food was found for this barcode, or the catalogue is offline. Add it manually from the label.'); }
 }
-
 export async function resolveTranscript(transcript: string, defaultDate: string, defaultTime?: string, context?: unknown): Promise<ResolveFoodResponse> {
-  return request('/v1/agent/command', { method: 'POST', body: JSON.stringify({ transcript, defaultDate, defaultTime, context }) });
+  return withKey((credentials) => resolveFood({ transcript, defaultDate, defaultTime, context }, credentials));
 }
-
 export async function planAssistantCommand(command: string, context: unknown): Promise<AssistantPlan> {
-  return request('/v1/assistant/plan', { method: 'POST', body: JSON.stringify({ command, context }) });
+  return withKey((credentials) => planCommand(command, context, credentials));
 }
-
 export async function transcribeRecording(uri: string): Promise<{ text: string; engine: string; retained: boolean }> {
-  if (!BUILD_ACCESS_TOKEN) throw missingBuildToken();
+  const apiKey = await requireGroqKey();
   const audio = new File(uri);
-  if (!audio.exists || audio.size <= 0) throw new Error('The phone created an empty recording. Please record again.');
+  if (!audio.exists || audio.size <= 0) throw new AiError('empty_recording', 'The recording is empty. Please record again.');
+  if (audio.size > 25 * 1024 * 1024) throw new AiError('audio_too_large', 'Keep the recording below 25 MB. Record a shorter message.');
   const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'm4a';
-  const mimeType = audio.type || (extension === 'webm' ? 'audio/webm' : extension === 'wav' ? 'audio/wav' : 'audio/mp4');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const form = new FormData();
+  // Expo File implements Blob; expo/fetch supports this multipart upload on native.
+  form.append('file', audio, `food-recording.${extension}`);
+  form.append('model', SPEECH_MODEL); form.append('response_format', 'json');
+  form.append('prompt', 'Food diary: roti, chapati, paratha, biryani, mash ki dal, aloo keema, chai, lassi.');
   try {
-    const response = await expoFetch(`${RELAY_BASE_URL}/v1/audio/transcribe`, { method: 'POST', signal: controller.signal, headers: { ...headers(mimeType), 'x-audio-filename': `food-recording.${extension}` }, body: audio });
-    if (!response.ok) throw friendlyError(response.status, await response.text());
-    return await response.json() as { text: string; engine: string; retained: boolean };
-  } finally { clearTimeout(timeout); }
+    const response = await groqFetch(apiKey, '/audio/transcriptions', { method: 'POST', body: form }, 60000, expoFetch as typeof fetch);
+    if (!response.ok) throw providerError(response);
+    const result = await response.json() as { text?: unknown };
+    if (typeof result.text !== 'string' || !result.text.trim() || result.text.length > 8000) throw new Error('groq_empty_response');
+    return { text: result.text.trim(), engine: SPEECH_MODEL, retained: false };
+  } catch (error) { throw safeAiError(error); }
 }
-
-export async function audioStatus(): Promise<{ configured: boolean; retention: string; provider?: string; mode?: string; model?: string }> {
-  return request('/v1/audio/status');
+export async function audioStatus() {
+  return { configured: await hasGroqKey(), retention: 'Groq account policy', provider: 'groq', mode: 'direct_user_key', model: SPEECH_MODEL };
 }
-
-export async function agentStatus(): Promise<{
-  appAgent: { enabled: boolean; provider: string; busy: boolean; timeoutSeconds: number };
-  foodAgent: { enabled: boolean; provider: string; liveSearch: boolean; busy: boolean; timeoutSeconds: number };
-}> {
-  return request('/v1/agent/status');
-}
-
-export async function postTestTelemetry(deviceId: string, events: TestTelemetryEvent[]): Promise<void> {
-  await request('/v1/test-telemetry', { method: 'POST', body: JSON.stringify({ deviceId, events }) });
-}
-
-export async function resetTestTelemetry(deviceId: string): Promise<void> {
-  await request('/v1/test-telemetry/reset', { method: 'POST', body: JSON.stringify({ deviceId }) });
+export async function agentStatus() {
+  const enabled = await hasGroqKey();
+  return { appAgent: { enabled, provider: 'groq-direct', busy: false, timeoutSeconds: 110 }, foodAgent: { enabled, provider: 'groq-direct', liveSearch: false, busy: false, timeoutSeconds: 45 } };
 }

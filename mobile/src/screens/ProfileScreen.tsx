@@ -15,17 +15,18 @@ import { HealthConnectStatus } from '../services/healthConnect';
 import { deviceTimeZone, isSupportedTimeZone } from '../utils/dates';
 import { recommendDailyGoal } from '../logic/tdee';
 import { AppUpdatePanel } from '../components/AppUpdatePanel';
-import { recordTestTelemetry } from '../logic/testTelemetry';
-import { telemetryQueueStatus } from '../logic/testTelemetry';
+import { recordLocalDiagnostic } from '../logic/localDiagnostics';
+import { ApiKeySettings } from '../components/ApiKeySettings';
+import { LocalDiagnosticsPanel } from '../components/LocalDiagnosticsPanel';
 import { previewPortableBackup } from '../logic/backup';
 import { pickPortableBackupFile, savePortableBackupFile } from '../services/portableMedia';
 
-type Panel = 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'updates' | 'data' | 'security' | null;
+type Panel = 'ai' | 'profile' | 'goals' | 'statistics' | 'time' | 'appearance' | 'connections' | 'updates' | 'data' | 'security' | null;
 
-export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, initialPanel, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onExportDiagnostics, testingTelemetryEnabled, onClearTestTelemetry, onUndoRestore, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations, onBeforeRestart }: {
+export function ProfileScreen({ state, date, status, healthConnect, audioConfigured, appAgentEnabled, initialPanel, activeTheme = loadedTheme, onThemeChange, onSave, onSavePhoto, pinEnabled, onSetLocalPin, onLoadDemo, onExport, onExportDiagnostics, onUndoRestore, onImport, onConnectHealth, onOpenHealthSettings, onRefreshIntegrations, onBeforeRestart }: {
   state: AppState; date: string; status: string; healthConnect: HealthConnectStatus | null; audioConfigured: boolean | null; appAgentEnabled: boolean | null;
   initialPanel?: Panel; activeTheme?: AppThemeName; onThemeChange: (theme: AppThemeName) => void; onSave: (profile: ProfileInput) => void; onSavePhoto: (uri?: string) => Promise<void>;
-  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => Promise<string>; onUndoRestore: () => Promise<void>; onExportDiagnostics: () => Promise<string>; testingTelemetryEnabled: boolean; onClearTestTelemetry: () => Promise<void>; onImport: (text: string) => void;
+  pinEnabled: boolean; onSetLocalPin: (pin: string | null) => Promise<void>; onLoadDemo: () => void; onExport: () => Promise<string>; onUndoRestore: () => Promise<void>; onExportDiagnostics: () => Promise<string>; onImport: (text: string) => void;
   onConnectHealth: () => void; onOpenHealthSettings: () => void; onRefreshIntegrations: () => void; onBeforeRestart?: () => Promise<void>;
 }) {
   const profile = state.profile;
@@ -74,7 +75,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
   }, [initialPanel]);
 
   useEffect(() => {
-    recordTestTelemetry('profile_panel_viewed', { panel: panel || 'account_home' });
+    recordLocalDiagnostic('profile_panel_viewed', { panel: panel || 'account_home' });
   }, [panel]);
 
   const year = useMemo(() => {
@@ -155,19 +156,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
     } catch (error) { Alert.alert('Cannot open backup', String(error)); }
     finally { setReadingBackup(false); }
   }
-  async function showTelemetryStatus() {
-    const status = await telemetryQueueStatus();
-    Alert.alert('Private test uploads', `${status.queued} queued · ${status.dropped} dropped\nLast upload: ${status.lastUploadAt || 'not yet'}\n${status.lastError || 'No pending upload error'}`);
-  }
   async function exportDiagnostics() { const text = await onExportDiagnostics(); await Share.share({ title: `Weed Fitness AI diagnostics ${date}`, message: text }); }
-  async function clearTestTelemetry() {
-    try {
-      await onClearTestTelemetry();
-      Alert.alert('Test data cleared', 'This phone\'s remote test telemetry and unsent queue were deleted. New testing activity will begin collecting again automatically.');
-    } catch {
-      Alert.alert('Could not clear test data', 'Keep this phone online and try again.');
-    }
-  }
   async function savePin() {
     if (!/^\d{4,8}$/.test(pin)) return Alert.alert('Choose a PIN', 'Use 4 to 8 digits.');
     if (pin !== confirmPin) return Alert.alert('PINs do not match', 'Enter the same PIN twice.');
@@ -177,9 +166,9 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
   function displayWeight(value?: number) { if (value == null) return 'No check-in'; return profile?.preferredWeightUnit === 'lb' ? `${kgToLb(value).toFixed(1)} lb` : `${value.toFixed(1)} kg`; }
   const goalLabel = profile?.goalMode === 'lose' ? 'Lose weight' : profile?.goalMode === 'gain' ? 'Build weight / muscle' : 'Maintain weight';
   const healthLabel = healthConnect?.permissionGranted ? 'Connected' : healthConnect?.developmentBuildRequired ? 'Needs APK build' : healthConnect?.available ? 'Ready to connect' : 'Checking phone';
-  const voiceLabel = audioConfigured ? 'Ready' : audioConfigured === false ? 'Service needs attention' : 'Checking';
-  const voiceDetail = audioConfigured ? 'Groq Whisper transcription and the food agent run through the private HTTPS service. No PC connection or API-key entry is required.' : audioConfigured === false ? 'The private AI service did not report as ready. Tap Refresh services after confirming this is the newest APK and the phone has internet.' : 'Checking the private AI service. Tap Refresh services if this does not update in a moment.';
-  const foodAgentLabel = appAgentEnabled ? 'Ready' : appAgentEnabled === false ? 'Service needs attention' : 'Checking';
+  const voiceLabel = audioConfigured ? 'Key saved' : audioConfigured === false ? 'Add your key' : 'Checking';
+  const voiceDetail = 'Whisper uses your own Groq key directly from this phone. Configure or replace it in AI & API key. Availability and limits follow your Groq account.';
+  const foodAgentLabel = appAgentEnabled ? 'Key saved' : appAgentEnabled === false ? 'Add your key' : 'Checking';
   const currentGoal = profile ? recommendDailyGoal(profile, date) : undefined;
   const program = state.nutritionProgram;
   const avatar = <Pressable onPress={() => void choosePhoto()} accessibilityRole="button" accessibilityLabel="Change profile photo" style={styles.avatarButton}>
@@ -196,10 +185,10 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
       <View style={styles.metricGrid}><Metric icon="calendar-outline" label="Logged days" value={String(year.loggedDays)} /><Metric icon="scale-outline" label="Weight change" value={year.weightChange == null ? '—' : `${year.weightChange > 0 ? '+' : ''}${profile?.preferredWeightUnit === 'lb' ? kgToLb(year.weightChange).toFixed(1) : year.weightChange.toFixed(1)} ${profile?.preferredWeightUnit === 'lb' ? 'lb' : 'kg'}`} /><Metric icon="flag-outline" label="Goal progress" value={year.goalProgress == null ? 'Steady' : `${year.goalProgress.toFixed(0)}%`} /></View>
       <SettingsGroup title="Account"><SettingsRow icon="person-outline" title="Profile & measurements" detail="Name, body details, units, and goal pace" onPress={() => setPanel('profile')} /><SettingsRow icon="flag-outline" title="Goals & daily plan" detail="Your target, adaptive check-ins, and how it works" onPress={() => setPanel('goals')} /><SettingsRow icon="stats-chart-outline" title="Progress & statistics" detail="A compact account summary of your own data" onPress={() => setPanel('statistics')} last /></SettingsGroup>
       <SettingsGroup title="Preferences"><SettingsRow icon="time-outline" title="Date & time" detail={timeZone === 'device' ? `Device time · ${deviceTimeZone()}` : timeZone} onPress={() => setPanel('time')} /><SettingsRow icon="color-palette-outline" title="Appearance & display" detail={themeOptions.find((item) => item.key === activeTheme)?.label || 'Theme'} onPress={() => setPanel('appearance')} /><SettingsRow icon="shield-checkmark-outline" title="Local app lock" detail={pinEnabled ? 'PIN enabled' : 'No PIN set'} onPress={() => setPanel('security')} last /></SettingsGroup>
-      <SettingsGroup title="Services"><SettingsRow icon="link-outline" title="Connections" detail={`Voice: ${voiceLabel} · Health: ${healthLabel}`} onPress={() => setPanel('connections')} last /></SettingsGroup>
+      <SettingsGroup title="Services"><SettingsRow icon="key-outline" title="AI & API key" detail={appAgentEnabled ? 'Your Groq key · saved on this phone' : 'Add your key to enable AI and speech'} onPress={() => setPanel('ai')} /><SettingsRow icon="link-outline" title="Connections" detail={`Voice: ${voiceLabel} · Health: ${healthLabel}`} onPress={() => setPanel('connections')} last /></SettingsGroup>
       <SettingsGroup title="App"><SettingsRow icon="download-outline" title="Updates" detail="Version, channel, and update status" onPress={() => setPanel('updates')} last /></SettingsGroup>
       <SettingsGroup title="Your data"><SettingsRow icon="archive-outline" title="Backup & restore" detail="Your diary stays on this device" onPress={() => setPanel('data')} last /></SettingsGroup>
-      <Text style={styles.footer}>PRIVATE PREVIEW · DATA SAVED LOCALLY FIRST</Text>
+      <Text style={styles.footer}>YOUR DATA · SAVED ON THIS PHONE</Text>
     </> : null}
 
     {panel === 'profile' ? <>
@@ -217,6 +206,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
 
     {panel === 'time' ? <><SectionTitle title="Date & time" detail="used for new diary items" /><Card><Text style={styles.explainer}>Device time is the normal choice. It fixes the old UTC date shift and works wherever the phone travels.</Text><ChipRow><Chip label={`Device (${deviceTimeZone()})`} selected={timeZone === 'device'} onPress={() => setTimeZone('device')} /><Chip label="Pakistan · UTC+5" selected={timeZone === 'Asia/Karachi'} onPress={() => setTimeZone('Asia/Karachi')} /></ChipRow><Field label="Other IANA time zone (optional)" value={timeZone === 'device' || timeZone === 'Asia/Karachi' ? '' : timeZone} onChangeText={(value) => setTimeZone(value.trim() || 'device')} placeholder="Example: Europe/London" autoCapitalize="none" /><Button label="Save date & time" onPress={saveTimeZone} /></Card></> : null}
 
+    {panel === 'ai' ? <ApiKeySettings onChanged={onRefreshIntegrations} /> : null}
     {panel === 'appearance' ? <><SectionTitle title="Appearance & display" detail="stored on this phone" /><Card><Text style={styles.explainer}>Choose a palette for the entire interface.</Text><ChipRow>{themeOptions.map((theme) => <Chip key={theme.key} label={theme.label} selected={activeTheme === theme.key} onPress={() => onThemeChange(theme.key)} />)}</ChipRow><Text style={styles.systemDetail}>{themeOptions.find((theme) => theme.key === activeTheme)?.detail} Colors change immediately without restarting or leaving this page.</Text></Card><Card><Text style={styles.rowTitle}>Screen brightness</Text><Text style={styles.systemDetail}>Weed Fitness follows your phone’s brightness and dark-mode settings. The app does not change device brightness automatically.</Text></Card></> : null}
 
     {panel === 'connections' ? <><SectionTitle title="Connections" detail="services used by this phone" /><Card><ConnectionStatus icon="mic-outline" title="Voice assistant" detail={voiceDetail} state={voiceLabel} /><ConnectionStatus icon="sparkles-outline" title="Food agent" detail="The agent can prepare, save, edit, or delete food and weight actions after your confirmation. Your diary remains on this phone." state={foodAgentLabel} /><ConnectionStatus icon="heart-outline" title="Health Connect" detail={healthConnect?.message || 'Share workouts, active calories, distance, and weight from Health Connect. Tracker source labels are kept on imported workouts.'} state={healthLabel} /><View style={styles.actions}><Button label={healthConnect?.permissionGranted ? 'Update access' : 'Connect Health'} compact tone="secondary" onPress={onConnectHealth} />{healthConnect?.permissionGranted ? <Button label="Health settings" compact tone="ghost" onPress={onOpenHealthSettings} /> : null}<Button label="Refresh services" compact tone="ghost" onPress={onRefreshIntegrations} /></View><ConnectionStatus icon="walk-outline" title="Strava" detail="If Strava shares an activity with Health Connect, it is imported here automatically with a Strava source label. No separate Strava API or subscription is used." state="Via Health Connect" /></Card></> : null}
@@ -238,13 +228,7 @@ export function ProfileScreen({ state, date, status, healthConnect, audioConfigu
           <Field label="Paste complete backup JSON" value={backupText} onChangeText={setBackupText} multiline autoCapitalize="none" />
           <Button label="Review and restore pasted backup" tone="danger" onPress={() => confirmImport()} />
         </> : null}
-        {testingTelemetryEnabled ? <>
-        <Button label="Test upload status" tone="secondary" onPress={showTelemetryStatus} />
-          <View style={styles.divider} />
-          <Text style={styles.rowTitle}>Private test telemetry is active</Text>
-          <Text style={styles.systemDetail}>This preview build automatically sends app interactions, AI commands and replies, action outcomes, errors, and your test diary snapshot to the owner’s private debugging database. It never sends API keys or raw audio. This is only for your pre-product testing and will be removed before public release.</Text>
-          <Button label="Clear this phone's cloud test data" tone="secondary" onPress={() => Alert.alert('Clear cloud test data?', 'This removes the remote telemetry for this test phone. New activity will begin collecting again automatically.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: () => void clearTestTelemetry() }])} />
-        </> : null}
+        <LocalDiagnosticsPanel />
         <View style={styles.divider} />
         <Text style={styles.rowTitle}>Manual AI diagnostics</Text>
         <Text style={styles.systemDetail}>The last 120 local AI events can still be shared as JSON if you want to inspect them yourself.</Text>

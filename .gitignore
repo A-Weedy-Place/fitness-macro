@@ -36,3 +36,13 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Never publish local credentials or native signing material
+.env.*
+!.env.example
+.dev.vars*
+!.dev.vars.example
+.wrangler/
+*.jks
+*.keystore
+credentials.json

@@ -5,8 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { createDurableWriter, KeyValueStore } from '../src/storage/serialStore';
-import { TelemetryQueue, telemetryBatch, TestTelemetryEvent, TELEMETRY_REQUEST_BYTES } from '../src/logic/telemetryQueue';
-import { utf8Bytes } from '../src/logic/bytes';
 import { createPortableBackup, previewPortableBackup, restorePortableBackup, prepareBackupRestore } from '../src/logic/backup';
 import { EMPTY_STATE, migrateState, upsertEntry, upsertFood, removeEntry, decodeStoredState } from '../src/storage/localDb';
 import { FoodEntry, FoodItem } from '../src/types';
@@ -16,7 +14,6 @@ function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   const data = new Map<string, string>();
   return { data, getItem: async (key) => data.get(key) ?? null, setItem: async (key, value) => { data.set(key, value); }, removeItem: async (key) => { data.delete(key); } };
 }
-function event(id: string, payload?: unknown): TestTelemetryEvent { return { id, at: '2026-09-09T12:00:00Z', type: 'action', payload }; }
 
 test('durable writes serialize, reject failures, and permit a later retry', async () => {
   const store = memoryStore(); const started = deferred(); const release = deferred(); const calls: string[] = [];
@@ -29,52 +26,6 @@ test('durable writes serialize, reject failures, and permit a later retry', asyn
   assert.deepEqual(calls, ['1']);
   release.resolve(); await rejected; await second;
   assert.equal(store.data.get('state'), '2');
-});
-
-test('telemetry keeps an event queued while another upload is in flight', async () => {
-  const store = memoryStore(); const started = deferred(); const release = deferred(); const uploaded: string[] = [];
-  const queue = new TelemetryQueue(store, 'queue', async () => 'test_device_test', async (_device, batch) => { uploaded.push(...batch.map((item) => item.id)); if (batch[0].id === 'A') { started.resolve(); await release.promise; } });
-  await queue.enqueue(event('A'));
-  const flush = queue.flush(); await started.promise;
-  await queue.enqueue(event('B'));
-  release.resolve(); await flush;
-  assert.deepEqual(uploaded, ['A', 'B']);
-  assert.equal((await queue.status()).queued, 0);
-});
-
-test('failed telemetry uploads retain IDs and retry without silent deletion', async () => {
-  const store = memoryStore(); let failing = true; const attempted: string[][] = [];
-  const queue = new TelemetryQueue(store, 'queue', async () => 'test_device_test', async (_device, batch) => { attempted.push(batch.map((item) => item.id)); if (failing) throw new Error('offline'); });
-  await queue.enqueue(event('A')); await queue.flush();
-  assert.equal((await queue.status()).queued, 1); assert.equal((await queue.status()).lastError, 'offline');
-  failing = false; await queue.flush();
-  assert.deepEqual(attempted, [['A'], ['A']]); assert.equal((await queue.status()).queued, 0);
-});
-
-test('telemetry body budget counts multibyte Unicode and drains oversized batches separately', async () => {
-  const large = event('A', '🥘'.repeat(40_000));
-  assert.equal(utf8Bytes('a🥘é'), Buffer.byteLength('a🥘é'));
-  const batch = telemetryBatch('test_device_test', [large, { ...large, id: 'B' }]);
-  assert.equal(batch.length, 1); assert.ok(utf8Bytes(JSON.stringify({ deviceId: 'test_device_test', events: batch })) <= TELEMETRY_REQUEST_BYTES);
-  const sizes: number[] = []; const queue = new TelemetryQueue(memoryStore(), 'queue', async () => 'test_device_test', async (deviceId, events) => { sizes.push(utf8Bytes(JSON.stringify({ deviceId, events }))); });
-  await queue.enqueue(large); await queue.enqueue({ ...large, id: 'B' }); await queue.flush();
-  assert.equal(sizes.length, 2); assert.ok(sizes.every((bytes) => bytes <= TELEMETRY_REQUEST_BYTES));
-});
-
-test('queue bounds and truncated payloads are visible rather than pretending full coverage', async () => {
-  const queue = new TelemetryQueue(memoryStore(), 'queue', async () => 'test_device_test', async () => undefined);
-  for (let i = 0; i < 8; i += 1) await queue.enqueue(event(String(i), 'x'.repeat(220_000)));
-  assert.ok((await queue.status()).dropped > 0);
-  await queue.enqueue(event('huge', 'x'.repeat(250_000)));
-  assert.equal((await queue.status()).truncated, 1);
-});
-
-test('remote reset waits for active upload before deleting the testing trail', async () => {
-  const started = deferred(); const release = deferred(); const order: string[] = [];
-  const queue = new TelemetryQueue(memoryStore(), 'queue', async () => 'test_device_test', async () => { started.resolve(); await release.promise; order.push('upload'); });
-  await queue.enqueue(event('A')); const flush = queue.flush(); await started.promise;
-  const reset = queue.reset(async () => { order.push('delete'); }); release.resolve(); await Promise.all([flush, reset]);
-  assert.deepEqual(order, ['upload', 'delete']); assert.equal((await queue.status()).queued, 0);
 });
 
 test('backup rejects unrelated JSON, incomplete collections, invalid macros and missing references', () => {

@@ -1,3 +1,0 @@
-# Development-only values. Never commit a real key or token.
-GROQ_API_KEY=
-APP_ACCESS_TOKEN=

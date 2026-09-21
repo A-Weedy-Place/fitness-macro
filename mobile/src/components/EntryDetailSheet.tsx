@@ -10,7 +10,7 @@ import { PortionEditor } from './PortionEditor';
 import { CalendarPicker } from './CalendarPicker';
 import { Button, Field } from './ui';
 import { colors } from '../theme';
-import { recordTestTelemetry } from '../logic/testTelemetry';
+import { recordLocalDiagnostic } from '../logic/localDiagnostics';
 import { validAssistantDate } from '../logic/assistantActions';
 
 function validTime(value: string): string | null {
@@ -42,7 +42,7 @@ export function EntryDetailSheet({ entry, food, onClose, onSave, onDelete }: {
   useEffect(() => {
     if (!entry) return;
     setDate(entry.date); setTime(entry.eatenAt || '12:00'); setQuantity(String(entry.portion.quantity)); setUnit(entry.portion.unit); setNote(entry.note || '');
-    recordTestTelemetry('diary_item_editor_opened', { entryId: entry.id, foodId: entry.foodId, date: entry.date, time: entry.eatenAt || null });
+    recordLocalDiagnostic('diary_item_editor_opened', { entryId: entry.id, foodId: entry.foodId, date: entry.date, time: entry.eatenAt || null });
   }, [entry?.id]);
   const preview = useMemo(() => entry && food ? nutritionForEntry({ ...entry, nutritionSnapshot: Number(quantity) === entry.portion.quantity && unit === entry.portion.unit ? entry.nutritionSnapshot : undefined, portion: { ...entry.portion, quantity: Number(quantity) || 0, unit } }, food) : null, [entry, food, quantity, unit]);
   if (!entry || !food) return null;

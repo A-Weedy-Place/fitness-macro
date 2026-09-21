@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 (2026-09-21)
+
+- Bring your own Groq key in You → AI & API key; masked entry, validation, replacement and removal using device SecureStore.
+- Whisper transcription and GPT-OSS planning run directly from the app against Groq, with no PC, shared developer key or Cloudflare relay.
+- Manual catalogue lookup needs no key. Existing confirmation, portion validation and two-model-call ceiling remain.
+- Removed automatic cloud test uploads; optional local diagnostics are redacted, bounded and explicitly shareable.
+- Breaking setup change: existing users must add their own Groq key for AI. Native runtime remains 0.2.2; no reinstall or diary reset required.
+
 ## [0.2.4](https://github.com/A-Weedy-Place/fitness-macro/compare/v0.2.3...v0.2.4) (2026-09-09)
 
 - Android Back closes settings/cookbook subviews before returning to Today; selected foods require confirmation before discard.
